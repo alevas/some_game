@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Noir Language Riddles: The Babel Conspiracy</title>
+    <style>
+        body {
+            background-color: black;
+            color: #e0e0e0;
+            font-family: "Courier New", monospace;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.7;
+        }
+        h1 {
+            font-size: 28px;
+            border-bottom: 2px solid #444;
+            padding-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        h2 {
+            font-size: 22px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        .passage {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+        }
+        a {
+            color: #999;
+            text-decoration: none;
+            border: 1px solid #555;
+            padding: 3px 8px;
+            margin: 2px;
+            font-size: 14px;
+        }
+        a:hover {
+            background-color: #333;
+            color: #fff;
+        }
+        .dialogue {
+            font-style: italic;
+            color: #bbb;
+            margin: 10px 0;
+        }
+        .clue {
+            font-family: "Courier New", monospace;
+            background-color: #111;
+            padding: 8px 12px;
+            border-left: 3px solid #555;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .cyrillic {
+            font-family: "Courier New", monospace;
+            /* Ensures Cyrillic displays correctly */
+            font-size: 18px;
+        }
+        .location {
+            font-weight: bold;
+            color: #aaa;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <!-- CLIENT'S OFFICE -->
+    <div id="ClientOffice" class="passage">
+        <div class="location">:: CLIENT'S OFFICE - BERLIN, 1947 ::</div>
+        <h1>The Babel Conspiracy</h1>
+        
+        <p>The rain taps against your window like Morse code you can't decipher. The office smells of cheap coffee and older secrets.</p>
+        
+        <p class="dialogue">"She's dead, detective. And she left you this."</p>
+        
+        <p>Dr. Klaus Weber, Elena's colleague, slides a crumpled note across your desk. His hands shake. A linguist, not a man used to violence.</p>
+        
+        <div class="clue">βιβλίο</div>
+        
+        <p class="dialogue">"Elena was obsessed with tracing words back to their roots. Said she'd found something... dangerous. This is Greek. Means 'book.' Where would a book be?"</p>
+        
+        <p>
+            <a href="#Library">Library</a>
+            <a href="#WrongStart">University</a>
+            <a href="#WrongStart">Her apartment</a>
+        </p>
+    </div>
+
+    <!-- WRONG START -->
+    <div id="WrongStart" class="passage" hidden>
+        <h2>Dead End</h2>
+        <p class="dialogue">"That's not what she meant."</p>
+        <p>Weber looks disappointed. "Elena was precise. Think about where books <em>live</em>."</p>
+        <p><a href="#ClientOffice">Try again</a></p>
+    </div>
+
+    <!-- BERLIN STATE LIBRARY -->
+    <div id="Library" class="passage" hidden>
+        <div class="location">:: BERLIN STATE LIBRARY ::</div>
+        <h2>A Trail of Ink</h2>
+        
+        <p>The library smells of old paper and older knowledge. You find Elena's research desk in the linguistics section. A coffee cup, half-full and cold. A German newspaper lies open.</p>
+        
+        <p>A bookmark falls out as you flip through a volume on Indo-European roots. On it, scrawled in hurried handwriting:</p>
+        
+        <div class="clue">Linguisten trafen sich, wo "Kaffee" fließt</div>
+        
+        <p class="dialogue">A librarian approaches. "That young woman came here often. Always met someone at the café across the street. Strange pair—she'd speak German with him, but their notes..." She trails off. "Full of symbols."</p>
+        
+        <p><em>Where would linguists meet over coffee?</em></p>
+        
+        <p>
+            <a href="#Cafe">Café Mozart</a>
+            <a href="#WrongLibrary">The university</a>
+            <a href="#WrongLibrary">A private club</a>
+        </p>
+    </div>
+
+    <!-- WRONG LIBRARY -->
+    <div id="WrongLibrary" class="passage" hidden>
+        <h2>Empty Air</h2>
+        <p>You check the university, but the janitor hasn't seen anyone matching the description. "The professors here don't drink that <em>Kaffee</em> stuff. Too bitter for their taste."</p>
+        <p class="dialogue">"Try the place where the coffee's good and the secrets flow like wine," the librarian had said.</p>
+        <p><a href="#Library">Back to the library</a></p>
+    </div>
+
+    <!-- CAFÉ MOZART -->
+    <div id="Cafe" class="passage" hidden>
+        <div class="location">:: CAFÉ MOZART ::</div>
+        <h2>Bittersweet Aroma</h2>
+        
+        <p>The bell above the door chimes as you enter. The scent of fresh coffee and cigarette smoke lingers. A Spanish newspaper sits abandoned on a table.</p>
+        
+        <p>The waiter recognizes Elena's photo. "Ah, the professor. She always sat in the corner. Left something for you, perhaps?" He points to a sugar packet with writing on it.</p>
+        
+        <div class="clue">El secreto está en la iglesia</div>
+        
+        <p class="dialogue">"She came in every Tuesday. Always with that same man. They'd talk for hours, switching between languages like it was nothing. Then last week..." He shrugs. "She stopped coming."</p>
+        
+        <p><em>What does the Spanish clue mean?</em></p>
+        
+        <p>
+            <a href="#Church">St. Nicholas Church</a>
+            <a href="#WrongCafe">The cathedral</a>
+            <a href="#WrongCafe">A monastery</a>
+        </p>
+    </div>
+
+    <!-- WRONG CAFÉ -->
+    <div id="WrongCafe" class="passage" hidden>
+        <h2>Silent Pews</h2>
+        <p>The cathedral is nearly empty. A priest looks up from his prayers. "No one by that description has been here. But..." He hesitates. "There's a smaller church, St. Nicholas. Old. The kind of place that remembers things."</p>
+        <p><em>Iglesia means church. The secret is in the church.</em></p>
+        <p><a href="#Cafe">Back to the café</a></p>
+    </div>
+
+    <!-- ST. NICHOLAS CHURCH -->
+    <div id="Church" class="passage" hidden>
+        <div class="location">:: ST. NICHOLAS CHURCH ::</div>
+        <h2>Whispers in the Confessional</h2>
+        
+        <p>The church is dark, the air thick with incense. Your footsteps echo. In a back pew, you find a prayer book with a scrap of paper tucked inside.</p>
+        
+        <p>The handwriting is different—blockier. And the script... Cyrillic. Elena must have had a Russian contact.</p>
+        
+        <div class="clue cyrillic">Документы в архиве</div>
+        
+        <p class="dialogue">The old sacristan watches you. "That professor... she asked about our oldest texts. Said she was looking for a connection between languages. Between God and man, even." He crosses himself. "Some doors shouldn't be opened."</p>
+        
+        <p><em>What does the Russian say?</em></p>
+        
+        <p>
+            <a href="#Archive">University Archive</a>
+            <a href="#WrongChurch">The library again</a>
+            <a href="#WrongChurch">A government building</a>
+        </p>
+    </div>
+
+    <!-- WRONG CHURCH -->
+    <div id="WrongChurch" class="passage" hidden>
+        <h2>No Documents Here</h2>
+        <p>The library has nothing new. The clerk is tired of seeing you. "Try the university. They keep everything there."</p>
+        <p><em>Документы = Documents. Archv = Archive.</em></p>
+        <p><a href="#Church">Back to the church</a></p>
+    </div>
+
+    <!-- UNIVERSITY ARCHIVE -->
+    <div id="Archive" class="passage" hidden>
+        <div class="location">:: UNIVERSITY ARCHIVE ::</div>
+        <h2>The Last Page</h2>
+        
+        <p>The archive is a maze of shelves and shadows. Dust motes dance in the dim light. And there, on a reading desk, lies an open manuscript.</p>
+        
+        <p>Elena's final work. The <em>Babel Manuscript</em>. Pages of meticulous research tracing Greek, German, English, Spanish, and even Russian words back to their Proto-Indo-European roots.</p>
+        
+        <p>And a note, in her hand:</p>
+        <div class="clue">"They killed me for this. The connections are real. Greek <i>patér</i>, German <i>Vater</i>, English <i>father</i>, Spanish <i>padre</i>, Russian <span class="cyrillic">отец</span> (otets)... all from PIE *pəter*. The first society... they'll stop at nothing to keep this hidden."</div>
+        
+        <p>A floorboard creaks behind you.</p>
+        
+        <p class="dialogue">"Ah. I see you've found it." A man steps from the shadows. Tall. Speaking with a Russian accent. "Dr. Volkov, at your service. Though Elena would have said <em>sluzhba</em>."</p>
+        
+        <p>He holds a gun. "Unfortunately, this manuscript belongs to my employers. The Babel Society doesn't take kindly to... <em>outsiders</em>."</p>
+        
+        <p>
+            <a href="#Confrontation">Draw your pistol</a>
+            <a href="#Confrontation">Stall for time</a>
+        </p>
+    </div>
+
+    <!-- CONFRONTATION -->
+    <div id="Confrontation" class="passage" hidden>
+        <div class="location">:: THE LAST WORD ::</div>
+        <h2>Epilogue</h2>
+        
+        <p>The confrontation is brief. A struggle. A gunshot. Volkov lies bleeding on the archive floor, the manuscript clutched in your hands.</p>
+        
+        <p>As the police arrive, you slip the pages into your coat. The Babel Society will come looking. But for now...</p>
+        
+        <p>You've solved the case. And learned something deeper: <em>All our words are connected.</em></p>
+        
+        <p>
+            <a href="#TheEnd">The End</a>
+        </p>
+    </div>
+
+    <!-- THE END -->
+    <div id="TheEnd" class="passage" hidden>
+        <h1>THE END</h1>
+        <p>For now.</p>
+        <p><em>Thanks for playing this prototype of<br>Noir Language Riddles: The Babel Conspiracy</em></p>
+        <p style="font-size: 12px; color: #666;">
+            Languages featured: Greek • German • Spanish • Russian (Cyrillic)
+        </p>
+    </div>
+
+    <script>
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'A') {
+                e.preventDefault();
+                const targetId = e.target.getAttribute('href').substring(1);
+                document.querySelectorAll('.passage').forEach(p => {
+                    p.hidden = true;
+                });
+                document.getElementById(targetId).hidden = false;
+                window.scrollTo(0, 0);
+            }
+        });
+        document.getElementById('ClientOffice').hidden = false;
+    </script>
+</body>
+</html>

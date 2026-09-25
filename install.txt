@@ -1,0 +1,38 @@
+NOIR LANGUAGE RIDDLES - INSTALLATION
+=====================================
+
+Option 1: EASIEST - Use the .zip file
+-------------------------------------
+1. Extract the zip file (noir_riddles_game.zip)
+2. Open a terminal/command prompt in the extracted folder
+3. Run one of these:
+   - Windows: double-click run_game.bat OR type: python main_polished.py
+   - Mac/Linux: chmod +x run_game.sh && ./run_game.sh OR python3 main_polished.py
+
+Option 2: CREATE A STANDALONE EXECUTABLE (Advanced)
+--------------------------------------------------
+If your friend doesn't have Python or you want a single .exe file:
+
+1. Install PyInstaller:
+   pip install pyinstaller
+
+2. Create the executable:
+   pyinstaller --onefile --name "NoirRiddles" main_polished.py
+
+3. The executable will be in the 'dist/' folder:
+   - Windows: dist/NoirRiddles.exe
+   - Mac/Linux: dist/NoirRiddles
+
+4. Share just the dist/NoirRiddles* file
+
+REQUIREMENTS
+------------
+- Python 3.6 or higher (for Option 1)
+- Works on Windows 7+, Mac OS X, Linux
+- Terminal with ANSI color support (most modern terminals have this)
+
+TROUBLESHOOTING
+---------------
+- If you see weird characters instead of colors, your terminal doesn't support ANSI colors
+- On Windows, try: python main_polished.py (not just double-clicking the .py file)
+- Make sure you have write permissions in your home folder for save files

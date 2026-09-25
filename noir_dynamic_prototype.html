@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Noir Language Riddles: Dynamic Version</title>
+    <style>
+        body {
+            background-color: black;
+            color: #e0e0e0;
+            font-family: "Courier New", monospace;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.7;
+        }
+        h1 {
+            font-size: 28px;
+            border-bottom: 2px solid #444;
+            padding-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        h2 {
+            font-size: 22px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        .passage {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+        }
+        a {
+            color: #999;
+            text-decoration: none;
+            border: 1px solid #555;
+            padding: 3px 8px;
+            margin: 2px;
+            font-size: 14px;
+            display: inline-block;
+        }
+        a:hover {
+            background-color: #333;
+            color: #fff;
+        }
+        .dialogue {
+            font-style: italic;
+            color: #bbb;
+            margin: 10px 0;
+        }
+        .clue {
+            font-family: "Courier New", monospace;
+            background-color: #111;
+            padding: 8px 12px;
+            border-left: 3px solid #555;
+            margin: 10px 0;
+            font-size: 16px;
+            white-space: pre-wrap;
+        }
+        .cyrillic {
+            font-family: "Courier New", monospace;
+            font-size: 18px;
+        }
+        .location {
+            font-weight: bold;
+            color: #aaa;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+        .wrong {
+            color: #666;
+            font-style: italic;
+        }
+        .hint {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        #loading {
+            color: #666;
+            font-style: italic;
+        }
+        .nav {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="passage">
+        <p>Loading the case files... <span id="dots"></span></p>
+    </div>
+
+    <script>
+        // Global state
+        let db = null;
+        let currentRiddle = null;
+        let currentLocation = null;
+        let gameState = {
+            visitedLocations: [],
+            solvedRiddles: [],
+            score: 0
+        };
+
+        // Animated dots for loading
+        const dots = ['', '.', '..', '...'];
+        let dotIndex = 0;
+        const dotsElement = document.getElementById('dots');
+        
+        setInterval(() => {
+            dotIndex = (dotIndex + 1) % dots.length;
+            dotsElement.textContent = dots[dotIndex];
+        }, 500);
+
+        // Load the database
+        async function loadDB() {
+            try {
+                const response = await fetch('riddles_db.json');
+                if (!response.ok) {
+                    throw new Error('Database not found');
+                }
+                db = await response.json();
+                startGame();
+            } catch (error) {
+                console.error('Error loading database:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<p>Error loading case files. <a href="#" onclick="loadFallback()">Load fallback data</a></p>';
+            }
+        }
+
+        function loadFallback() {
+            // Fallback data if file loading fails
+            db = {
+                riddles: [
+                    {
+                        id: 1,
+                        language: "Greek",
+                        text: "In Greek, it's <i>βιβλίο</i>. Where do these live?",
+                        clue: "βιβλίο",
+                        answer: "Library",
+                        wrong_answers: ["University", "Bookstore"],
+                        explanation: "From Greek βιβλιον (biblion) = book.",
+                        next_location: "Library"
+                    }
+                ],
+                locations: [
+                    {id: "ClientOffice", name: "Client's Office", first_riddle_id: 1}
+                ]
+            };
+            startGame();
+        }
+
+        function startGame() {
+            document.getElementById('loading').hidden = true;
+            
+            // Find the starting location
+            const startLoc = db.locations.find(l => l.id === "ClientOffice");
+            if (startLoc) {
+                showLocation(startLoc);
+            } else {
+                showRiddle(db.riddles[0]);
+            }
+        }
+
+        function showLocation(location) {
+            currentLocation = location;
+            gameState.visitedLocations.push(location.id);
+            
+            let html = `
+                <div class="passage">
+                    <div class="location">:: ${location.name.toUpperCase()} ::</div>
+                    <p>${location.description}</p>
+            `;
+
+            // Add character dialogue if available
+            const character = findCharacterForLocation(location.id);
+            if (character) {
+                html += `<p class="dialogue">"${character.dialogue[0]}"</p>`;
+            }
+
+            // Find the riddle for this location
+            const riddleId = location.riddle_id || location.first_riddle_id;
+            const riddle = db.riddles.find(r => r.id === riddleId);
+            
+            if (riddle) {
+                currentRiddle = riddle;
+                html += `
+                    <div class="clue">${riddle.clue}</div>
+                    <p><em>${riddle.text}</em></p>
+                    <p>
+                `;
+                
+                // Show answer options
+                const allAnswers = [riddle.answer, ...riddle.wrong_answers];
+                const shuffled = shuffleArray(allAnswers);
+                
+                shuffled.forEach(ans => {
+                    html += `<a href="#" onclick="checkAnswer('${ans.replace(/'/g, "\\'")}'); return false;">${ans}</a> `;
+                });
+                
+                html += `
+                    </p>
+                    <div id="hint-container" style="display:none;">
+                        <p class="hint">Hint: ${riddle.hint || 'Think carefully...'}</p>
+                        <a href="#" onclick="showHint(); return false;" id="show-hint-btn">Show hint</a>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+        }
+
+        function showRiddle(riddle) {
+            currentRiddle = riddle;
+            
+            let html = `
+                <div class="passage">
+                    <h2>Riddle: ${riddle.language}</h2>
+                    <div class="clue">${riddle.clue}</div>
+                    <p><em>${riddle.text}</em></p>
+                    <p>
+            `;
+            
+            const allAnswers = [riddle.answer, ...riddle.wrong_answers];
+            const shuffled = shuffleArray(allAnswers);
+            
+            shuffled.forEach(ans => {
+                html += `<a href="#" onclick="checkAnswer('${ans.replace(/'/g, "\\'")}'); return false;">${ans}</a> `;
+            });
+            
+            html += `
+                    </p>
+                    <div id="hint-container" style="display:none;">
+                        <p class="hint">Hint: ${riddle.hint || 'Think carefully...'}</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+        }
+
+        function checkAnswer(selected) {
+            const correct = selected === currentRiddle.answer;
+            
+            // Remove all passage content except the current one
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach((p, index) => {
+                if (index < passages.length - 1) {
+                    p.remove();
+                }
+            });
+            
+            const lastPassage = document.querySelector('.passage');
+            
+            if (correct) {
+                gameState.solvedRiddles.push(currentRiddle.id);
+                gameState.score += currentRiddle.difficulty * 10;
+                
+                let html = `
+                    <p style="color: #4CAF50;">✓ Correct!</p>
+                    <p><strong>${currentRiddle.answer}</strong></p>
+                    <p>${currentRiddle.explanation}</p>
+                `;
+                
+                // Show related words
+                if (currentRiddle.related_words) {
+                    html += '<p><small>Related words: ';
+                    const langs = Object.keys(currentRiddle.related_words);
+                    html += langs.map(l => `${l}: ${currentRiddle.related_words[l]}`).join(', ');
+                    html += '</small></p>';
+                }
+                
+                // Progress to next location
+                if (currentRiddle.next_location) {
+                    const nextLoc = db.locations.find(l => l.id === currentRiddle.next_location);
+                    if (nextLoc) {
+                        html += `<p><a href="#" onclick="showLocation(db.locations.find(l => l.id === '${currentRiddle.next_location}')); return false;">Continue to ${nextLoc.name}</a></p>`;
+                    } else {
+                        html += `<p><a href="#" onclick="showRandomRiddle(); return false;">Continue investigating</a></p>`;
+                    }
+                } else {
+                    html += `<p><a href="#" onclick="showRandomRiddle(); return false;">Next riddle</a></p>`;
+                }
+                
+                lastPassage.innerHTML += html;
+            } else {
+                let html = `
+                    <p class="wrong">✗ Wrong.</p>
+                    <p><em>${selected}</em> is not the answer.</p>
+                    <p>
+                        <a href="#" onclick="retryRiddle(); return false;">Try again</a>
+                        <a href="#" onclick="showHint(); return false;" id="show-hint-btn">Show hint</a>
+                    </p>
+                `;
+                lastPassage.innerHTML += html;
+            }
+        }
+
+        function retryRiddle() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            showRiddle(currentRiddle);
+        }
+
+        function showHint() {
+            const hintContainer = document.getElementById('hint-container');
+            if (hintContainer) {
+                hintContainer.style.display = 'block';
+            }
+            const btn = document.getElementById('show-hint-btn');
+            if (btn) btn.remove();
+        }
+
+        function showRandomRiddle() {
+            const unsolved = db.riddles.filter(r => !gameState.solvedRiddles.includes(r.id));
+            if (unsolved.length > 0) {
+                const randomRiddle = unsolved[Math.floor(Math.random() * unsolved.length)];
+                const passages = document.querySelectorAll('.passage');
+                passages.forEach(p => p.remove());
+                showRiddle(randomRiddle);
+            } else {
+                showEnding();
+            }
+        }
+
+        function showEnding() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            
+            const html = `
+                <div class="passage">
+                    <h1>Case Closed</h1>
+                    <p>You've solved ${gameState.solvedRiddles.length} of ${db.riddles.length} riddles.</p>
+                    <p>Final score: ${gameState.score} points</p>
+                    <p><em>The Babel Conspiracy unraveled. For now.</em></p>
+                    <p class="nav"><a href="#" onclick="restartGame(); return false;">Restart Case</a></p>
+                </div>
+            `;
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+        }
+
+        function restartGame() {
+            gameState = {
+                visitedLocations: [],
+                solvedRiddles: [],
+                score: 0
+            };
+            currentRiddle = null;
+            currentLocation = null;
+            
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            
+            document.getElementById('loading').hidden = false;
+            document.getElementById('loading').innerHTML = '<p>Restarting case... <span id="dots"></span></p>';
+            loadDB();
+        }
+
+        function findCharacterForLocation(locId) {
+            const locationMap = {
+                "ClientOffice": "Weber",
+                "Library": "Librarian",
+                "Cafe": "Waiter",
+                "Church": "Sacristan",
+                "Archive": "Volkov"
+            };
+            const charId = locationMap[locId];
+            return db.characters.find(c => c.id === charId);
+        }
+
+        function shuffleArray(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
+
+        // Load the database when the page loads
+        loadDB();
+    </script>
+</body>
+</html>

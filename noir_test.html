@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Noir Test</title>
+    <style>
+        body { background: black; color: #e0e0e0; font-family: "Courier New", monospace; max-width: 600px; margin: 0 auto; padding: 20px; }
+        a { color: #999; text-decoration: none; border: 1px solid #555; padding: 5px 10px; margin: 2px; }
+        a:hover { background: #333; color: #fff; }
+        .passage { margin-bottom: 20px; }
+        .clue { background: #111; padding: 8px 12px; border-left: 3px solid #555; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    
+    <script>
+        // Simple database
+        const db = {
+            riddles: [
+                {
+                    id: 1,
+                    text: "In Greek it is βιβλίο. Where do these live?",
+                    answer: "Library",
+                    wrong: ["School", "Home"],
+                    next: "cafe"
+                }
+            ],
+            locations: {
+                office: { id: "office", name: "Office", desc: "You are in the office. A note lies on the desk.", riddle: 1 },
+                cafe: { id: "cafe", name: "Cafe", desc: "You are in a cafe. Coffee smells good.", riddle: null }
+            }
+        };
+
+        // Game state
+        let state = { location: "office", solved: [], sanity: 3 };
+
+        // Start game
+        showLocation("office");
+
+        function showLocation(locId) {
+            state.location = locId;
+            const loc = db.locations[locId];
+            
+            let html = `<div class="passage">
+                <h2>${loc.name}</h2>
+                <p>${loc.desc}</p>`;
+            
+            if (loc.riddle) {
+                const riddle = db.riddles.find(r => r.id === loc.riddle);
+                html += `<div class="clue">Riddle</div><p><em>${riddle.text}</em></p><p>`;
+                
+                const answers = [riddle.answer, ...riddle.wrong];
+                answers.forEach(a => {
+                    html += `<a href="#" onclick="checkAnswer('${a}', '${riddle.next}'); return false;">${a}</a> `;
+                });
+                
+                html += `</p></div>`;
+            } else {
+                html += `<p>You solved all riddles here.</p>`;
+            }
+            
+            document.getElementById("game").innerHTML = html;
+        }
+
+        function checkAnswer(selected, nextLoc) {
+            const riddle = db.riddles.find(r => r.next === nextLoc);
+            
+            if (selected === riddle.answer) {
+                state.solved.push(riddle.id);
+                document.getElementById("game").innerHTML += `<p>Correct! <a href="#" onclick="showLocation('${nextLoc}'); return false;">Continue to ${db.locations[nextLoc].name}</a></p>`;
+            } else {
+                state.sanity--;
+                document.getElementById("game").innerHTML += `<p>Wrong. <a href="#" onclick="showLocation('${state.location}'); return false;">Try again</a></p>`;
+            }
+        }
+    </script>
+</body>
+</html>

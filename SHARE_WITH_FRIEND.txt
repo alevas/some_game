@@ -1,0 +1,53 @@
+SHARE THIS FILE WITH YOUR FRIEND
+===================================
+
+You have a standalone executable called "NoirRiddles" that works without needing Python installed!
+
+HOW TO RUN:
+-----------
+
+LINUX/MAC:
+  1. Copy the "NoirRiddles" file to any folder
+  2. Open a terminal in that folder
+  3. Make it executable: chmod +x NoirRiddles
+  4. Run it: ./NoirRiddles
+
+WINDOWS:
+  If your friend is on Windows, you'll need to create the executable on a Windows machine.
+  Instructions for them:
+  
+  pip install pyinstaller
+  pyinstaller --onefile --name "NoirRiddles" main_polished.py
+  
+  Then share the file from dist/NoirRiddles.exe
+
+
+WHAT THEY NEED:
+---------------
+- A modern computer (Windows, Mac, or Linux)
+- About 10MB of disk space
+- A terminal/command prompt
+
+
+SAVE FILES:
+-----------
+The game will save progress to:
+  Linux/Mac: ~/.babel_conspiracy_saves/
+  Windows: %USERPROFILE%\.babel_conspiracy_saves\
+
+They can continue their game later from the same computer.
+
+
+THE GAME:
+---------
+"Noir Language Riddles: The Babel Conspiracy"
+
+Berlin, 1947. A linguist has disappeared. Solve etymological riddles across 7 languages 
+to uncover the truth about the mysterious Babel Society.
+
+- 30+ linguistic puzzles
+- 5 unique locations
+- Multiple endings
+- Noir atmosphere
+
+Controls: Enter numbers to select answers, type 'm' for menu.

@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Noir Language Riddles: The Babel Conspiracy</title>
+    <style>
+        body {
+            background-color: black;
+            color: #e0e0e0;
+            font-family: "Courier New", monospace;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 10px;
+            line-height: 1.7;
+        }
+        @media (min-width: 768px) {
+            body {
+                padding: 20px;
+            }
+        }
+        h1 {
+            font-size: 24px;
+            border-bottom: 2px solid #444;
+            padding-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        @media (min-width: 768px) {
+            h1 {
+                font-size: 28px;
+            }
+        }
+        h2 {
+            font-size: 20px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        @media (min-width: 768px) {
+            h2 {
+                font-size: 22px;
+            }
+        }
+        .passage {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+        }
+        a {
+            color: #999;
+            text-decoration: none;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            margin: 2px;
+            font-size: 14px;
+            display: inline-block;
+            min-width: 44px;
+            min-height: 44px;
+            line-height: 34px;
+            text-align: center;
+        }
+        @media (min-width: 768px) {
+            a {
+                padding: 3px 8px;
+                font-size: 14px;
+                min-width: 0;
+                min-height: 0;
+                line-height: normal;
+            }
+        }
+        a:hover {
+            background-color: #333;
+            color: #fff;
+        }
+        .dialogue {
+            font-style: italic;
+            color: #bbb;
+            margin: 10px 0;
+        }
+        .clue {
+            font-family: "Courier New", monospace;
+            background-color: #111;
+            padding: 8px 12px;
+            border-left: 3px solid #555;
+            margin: 10px 0;
+            font-size: 16px;
+            white-space: pre-wrap;
+        }
+        .cyrillic {
+            font-family: "Courier New", monospace;
+            font-size: 18px;
+        }
+        .location {
+            font-weight: bold;
+            color: #aaa;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+        .wrong {
+            color: #e74c3c;
+            font-style: italic;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        .correct {
+            color: #4CAF50;
+        }
+        .hint {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        #loading {
+            color: #666;
+            font-style: italic;
+        }
+        .nav {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+        #game-ui {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 10px;
+            border-top: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            z-index: 100;
+        }
+        @media (min-width: 768px) {
+            #game-ui {
+                padding: 15px 20px;
+            }
+        }
+        #sanity-meter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+        @media (min-width: 768px) {
+            #sanity-meter {
+                gap: 10px;
+                margin-bottom: 0;
+            }
+        }
+        .sanity-full { color: #e74c3c; }
+        .sanity-low { color: #c0392b; }
+        .sanity-critical { color: #922b21; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        #inventory {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            max-width: 60%;
+            order: 3;
+            width: 100%;
+        }
+        @media (min-width: 768px) {
+            #inventory {
+                max-width: 50%;
+                order: 2;
+            }
+        }
+        .item {
+            background: #1a1a1a;
+            border: 1px solid #555;
+            padding: 2px 6px;
+            font-size: 12px;
+            border-radius: 3px;
+            cursor: default;
+        }
+        .item:hover {
+            background: #2a2a2a;
+            border-color: #777;
+        }
+        #inventory-label {
+            font-size: 12px;
+            color: #888;
+            margin-right: 10px;
+        }
+        .game-over, .ending {
+            text-align: center;
+            padding: 30px 15px;
+        }
+        @media (min-width: 768px) {
+            .game-over, .ending {
+                padding: 40px 20px;
+            }
+        }
+        .game-over h1 {
+            color: #e74c3c;
+        }
+        .ending h1 {
+            color: #4CAF50;
+        }
+        .stats {
+            background: #111;
+            padding: 15px;
+            border: 1px solid #444;
+            margin: 20px 0;
+            text-align: left;
+        }
+        #save-menu {
+            background: rgba(0,0,0,0.95);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 200;
+            display: none;
+            padding: 20px;
+        }
+        #save-menu.visible {
+            display: block;
+        }
+        .save-slot {
+            background: #111;
+            border: 1px solid #444;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .save-slot button {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- Save Menu -->
+    <div id="save-menu">
+        <h2>Save/Load Game</h2>
+        <div class="save-slot" id="slot1">
+            <strong>Slot 1</strong>
+            <div id="slot1-info">Empty</div>
+            <button onclick="saveGame(1)">Save</button>
+            <button onclick="loadGame(1)">Load</button>
+        </div>
+        <div class="save-slot" id="slot2">
+            <strong>Slot 2</strong>
+            <div id="slot2-info">Empty</div>
+            <button onclick="saveGame(2)">Save</button>
+            <button onclick="loadGame(2)">Load</button>
+        </div>
+        <div class="save-slot" id="slot3">
+            <strong>Slot 3</strong>
+            <div id="slot3-info">Empty</div>
+            <button onclick="saveGame(3)">Save</button>
+            <button onclick="loadGame(3)">Load</button>
+        </div>
+        <button onclick="toggleSaveMenu()" style="margin-top: 20px;">Close</button>
+    </div>
+
+    <!-- Game UI (fixed at bottom) -->
+    <div id="game-ui">
+        <div id="sanity-meter">
+            <span>SANITY: </span>
+            <span id="sanity-icons"></span>
+        </div>
+        <div id="score-display">SCORE: <span id="score">0</span></div>
+        <div>
+            <span id="inventory-label">INVENTORY:</span>
+            <div id="inventory"></div>
+        </div>
+        <div>
+            <button onclick="toggleSaveMenu()" style="background: #333; color: #ccc; border: 1px solid #555; padding: 3px 8px; cursor: pointer;">Menu</button>
+        </div>
+    </div>
+
+    <div id="loading" class="passage">
+        <p>Loading case files... <span id="dots"></span></p>
+    </div>
+
+    <script>
+        // ===== EMBEDDED DATABASE =====
+        const db = {
+  "riddles": [
+    {
+      "id": 1,
+      "language": "Greek",
+      "category": "location",
+      "text": "In Greek, it is βιβλίο (vivlio). Where do these live?",
+      "clue": "βιβλίο",
+      "answer": "Library",
+      "wrong_answers": ["University", "Bookstore", "Her apartment"],
+      "hint": "Think where books are collected and borrowed.",
+      "explanation": "From Greek βιβλιον (biblion) = book. The word library comes from Latin liber (book).",
+      "next_location": "Library",
+      "item": "Case File",
+      "difficulty": 1,
+      "related_words": {"Greek": "βιβλίο", "English": "library", "German": "Bibliothek"}
+    },
+    {
+      "id": 2,
+      "language": "German",
+      "category": "location",
+      "text": "In German, linguists met where Kaffee flows. Where?",
+      "clue": "Linguisten trafen sich, wo Kaffee fließt",
+      "answer": "Café Mozart",
+      "wrong_answers": ["The university", "A private club", "A beer hall"],
+      "hint": "Not a pub. Somewhere with coffee.",
+      "explanation": "Kaffee = coffee. Berlin intellectuals historically met in cafes.",
+      "next_location": "Cafe",
+      "item": "Sugar Packet with Clue",
+      "difficulty": 1,
+      "related_words": {"German": "Kaffee", "English": "coffee", "Spanish": "cafe"}
+    },
+    {
+      "id": 3,
+      "language": "Spanish",
+      "category": "etymology",
+      "text": "This word is libro in Spanish, livre in French, and Buch in German. What is it in English?",
+      "clue": "Spanish: libro | French: livre | German: Buch",
+      "answer": "Book",
+      "wrong_answers": ["Library", "Reading", "Novel"],
+      "hint": "All three words mean the same thing. Think: what do you read?",
+      "explanation": "All descend from Latin liber (inner bark of trees used for writing). Originally referred to the material, not the object.",
+      "next_location": "Cafe",
+      "item": "Spanish Dictionary",
+      "difficulty": 1,
+      "related_words": {"Spanish": "libro", "French": "livre", "German": "Buch", "English": "book"}
+    },
+    {
+      "id": 4,
+      "language": "Russian",
+      "category": "etymology",
+      "text": "This Slavic word is передача (peredacha) meaning transmission. What English word shares the Latin root 'trahere'?",
+      "clue": "передача (peredacha)",
+      "answer": "Tradition",
+      "wrong_answers": ["Transfer", "Translation", "Transport"],
+      "hint": "Think of passing down through generations.",
+      "explanation": "From Latin tradere = to hand over. Russian передача comes from the same PIE root *dʰeh₁- (to put, do).",
+      "next_location": "Archive",
+      "item": "Cipher Wheel",
+      "difficulty": 2,
+      "related_words": {"Russian": "передача", "Latin": "tradere", "English": "tradition"}
+    },
+    {
+      "id": 5,
+      "language": "Arvanitika",
+      "category": "false friends",
+      "text": "In Arvanitika, it is buke. In Greek, it is ψωμί (psomi). What is it in English?",
+      "clue": "Arvanitika: buke | Greek: ψωμί",
+      "answer": "Bread",
+      "wrong_answers": ["Book", "Brick", "Water"],
+      "hint": "It is a staple food.",
+      "explanation": "Arvanitika buke and Greek ψωμί both mean bread. Shows the Albanian-Greek linguistic connection in Arvanitika.",
+      "next_location": "Cafe",
+      "item": "Arvanitika Notes",
+      "difficulty": 2,
+      "related_words": {"Arvanitika": "buke", "Greek": "ψωμί", "English": "bread", "Albanian": "bukë"}
+    },
+    {
+      "id": 6,
+      "language": "Greek",
+      "category": "etymology",
+      "text": "In Greek, it is πατήρ (pater). In German, it is Vater. What is it in English?",
+      "clue": "Greek: πατήρ | German: Vater",
+      "answer": "Father",
+      "wrong_answers": ["Mother", "Brother", "Son"],
+      "hint": "PIE root: *pəter",
+      "explanation": "All descend from Proto-Indo-European *pəter. Shows the ancient connection between Greek and Germanic languages.",
+      "next_location": "Church",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Greek": "πατήρ", "German": "Vater", "English": "father", "Latin": "pater"}
+    },
+    {
+      "id": 7,
+      "language": "German",
+      "category": "false friends",
+      "text": "In German, Gift does not mean a present. What does it mean?",
+      "clue": "German: Gift",
+      "answer": "Poison",
+      "wrong_answers": ["Gift", "Present", "Disease"],
+      "hint": "In English, a gift is positive. Not so in German.",
+      "explanation": "German Gift = poison. English gift comes from Old Norse, meaning present. A classic false friend.",
+      "next_location": "Cafe",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"German": "Gift", "English": "poison"}
+    },
+    {
+      "id": 8,
+      "language": "English",
+      "category": "cognates",
+      "text": "This English word is mother in English, Mutter in German, andητήρ (meter) in Greek. What is it?",
+      "clue": "English: mother | German: Mutter | Greek: μητέρα",
+      "answer": "Mother",
+      "wrong_answers": ["Sister", "Aunt", "Wife"],
+      "hint": "PIE root: *méh₂tēr",
+      "explanation": "All from PIE *méh₂tēr. Shows how basic kinship terms are preserved across 4000+ years of language evolution.",
+      "next_location": "Church",
+      "item": "Family Tree",
+      "difficulty": 1,
+      "related_words": {"English": "mother", "German": "Mutter", "Greek": "μητέρα"}
+    },
+    {
+      "id": 9,
+      "language": "Spanish",
+      "category": "etymology",
+      "text": "This word is noche in Spanish. In Latin it was nox. What is it in English?",
+      "clue": "Spanish: noche | Latin: nox",
+      "answer": "Night",
+      "wrong_answers": ["Noon", "Noxious", "Nought"],
+      "hint": "It is the opposite of day.",
+      "explanation": "From Latin nox/noctis. English night also comes from the same PIE root *nókʷts.",
+      "next_location": "Library",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Spanish": "noche", "Latin": "nox", "English": "night"}
+    },
+    {
+      "id": 10,
+      "language": "Russian",
+      "category": "etymology",
+      "text": "This Russian word is водка (vodka). It comes from вода (voda) meaning water. What is the connection?",
+      "clue": "водка (vodka) | вода (voda)",
+      "answer": "Little water",
+      "wrong_answers": ["Fire water", "Strong drink", "Russian tea"],
+      "hint": "Vodka is a diminutive form.",
+      "explanation": "Vodka (водка) is the diminutive of вода (water, voda). Originally referred to distilled water or spirits. Shows how diminutives work in Slavic languages.",
+      "next_location": "Cafe",
+      "item": "Vodka Bottle",
+      "difficulty": 2,
+      "related_words": {"Russian": "водка", "Russian": "вода", "English": "water"}
+    },
+    {
+      "id": 11,
+      "language": "Arvanitika",
+      "category": "etymology",
+      "text": "In Arvanitika, motër means sister. What is the Greek word?",
+      "clue": "Arvanitika: motër",
+      "answer": "Αδελφή",
+      "wrong_answers": ["Μητέρα", "Θεία", "Φίλη"],
+      "hint": "Think of the Albanian word for sister.",
+      "explanation": "Arvanitika motër comes from Albanian motër. Greek αδελφή (adelfí) has no direct relation, showing Arvanitika\'s Albanian roots within Greece.",
+      "next_location": "Church",
+      "item": null,
+      "difficulty": 2,
+      "related_words": {"Arvanitika": "motër", "Greek": "αδελφή", "Albanian": "motër"}
+    },
+    {
+      "id": 12,
+      "language": "PIE",
+      "category": "etymology",
+      "text": "The PIE root *péh₂wr̥ means fire. What Greek and German words descend from this?",
+      "clue": "PIE: *péh₂wr̥",
+      "answer": "Fire / Feuer",
+      "wrong_answers": ["Water / Wasser", "Earth / Erde", "Air / Luft"],
+      "hint": "Think of the element that burns.",
+      "explanation": "Greek πῦρ (pŷr) and German Feuer both descend from PIE *péh₂wr̥. Shows how ancient roots persist in modern languages.",
+      "next_location": "Library",
+      "item": null,
+      "difficulty": 2,
+      "related_words": {"PIE": "*péh₂wr̥", "Greek": "πῦρ", "German": "Feuer"}
+    },
+    {
+      "id": 13,
+      "language": "Greek",
+      "category": "etymology",
+      "text": "In Greek, it is καρδία (kardia). In English, it is a vital organ. What is it?",
+      "clue": "καρδία (kardia)",
+      "answer": "Heart",
+      "wrong_answers": ["Brain", "Lungs", "Liver"],
+      "hint": "It pumps blood.",
+      "explanation": "Greek καρδία (kardia) = heart. English cardiac and courage also come from this root.",
+      "next_location": "Church",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Greek": "καρδία", "English": "heart", "Latin": "cor"}
+    },
+    {
+      "id": 14,
+      "language": "German",
+      "category": "etymology",
+      "text": "In German, Haus means house. What Old English word is cognate with this?",
+      "clue": "German: Haus",
+      "answer": "House",
+      "wrong_answers": ["Home", "Building", "Shelter"],
+      "hint": "It is where you live.",
+      "explanation": "German Haus and English house both come from PIE *ḱéysos. Shows the direct cognate relationship.",
+      "next_location": "Archive",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"German": "Haus", "English": "house", "PIE": "*ḱéysos"}
+    },
+    {
+      "id": 15,
+      "language": "Russian",
+      "category": "cognates",
+      "text": "This Russian word is брат (brat). What does it mean in English?",
+      "clue": "брат (brat)",
+      "answer": "Brother",
+      "wrong_answers": ["Friend", "Son", "Cousin"],
+      "hint": "It is a male family member.",
+      "explanation": "Russian брат (brat) and English brother both descend from PIE *bʰréh₂tēr. The Slavic form retained the original t.",
+      "next_location": "Archive",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Russian": "брат", "English": "brother", "German": "Bruder"}
+    },
+    {
+      "id": 16,
+      "language": "Spanish",
+      "category": "etymology",
+      "text": "In Spanish, it is agua. In Latin it was aqua. What is it in English?",
+      "clue": "Spanish: agua | Latin: aqua",
+      "answer": "Water",
+      "wrong_answers": ["Fire", "Earth", "Air"],
+      "hint": "It is a liquid that falls from the sky.",
+      "explanation": "Spanish agua, Latin aqua, and English water all come from PIE *wódr̥. The English form shows the effects of Grimm\'s Law.",
+      "next_location": "Cafe",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Spanish": "agua", "Latin": "aqua", "English": "water", "PIE": "*wódr̥"}
+    },
+    {
+      "id": 17,
+      "language": "Greek",
+      "category": "borrowings",
+      "text": "This Greek word φιλοσοφία (philosophia) was borrowed into English. What does it mean?",
+      "clue": "φιλοσοφία (philosophia)",
+      "answer": "Philosophy",
+      "wrong_answers": ["Sophist", "Philosophize", "Wisdom"],
+      "hint": "It means love of wisdom.",
+      "explanation": "From φιλεῖν (philein, to love) + σοφία (sophia, wisdom). Direct Greek borrowing into English.",
+      "next_location": "Library",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Greek": "φιλοσοφία", "English": "philosophy"}
+    },
+    {
+      "id": 18,
+      "language": "German",
+      "category": "etymology",
+      "text": "In German, the word for tree is Baum. What Old English word is cognate?",
+      "clue": "German: Baum",
+      "answer": "Beam",
+      "wrong_answers": ["Tree", "Wood", "Branch"],
+      "hint": "Think of the material, not the plant.",
+      "explanation": "German Baum (tree) and Old English bēam (tree, beam) come from PIE *bʰewh₂-. English beam (wooden support) retains the original meaning.",
+      "next_location": "Archive",
+      "item": "Wooden Box",
+      "difficulty": 2,
+      "related_words": {"German": "Baum", "Old English": "bēam", "English": "beam"}
+    },
+    {
+      "id": 19,
+      "language": "Russian",
+      "category": "false friends",
+      "text": "In Russian, время (vremya) means time. In English, we have a word that looks similar. What is it?",
+      "clue": "время (vremya)",
+      "answer": "Time",
+      "wrong_answers": ["Memory", "Weather", "Very"],
+      "hint": "It is not a false friend in this case.",
+      "explanation": "Despite the spelling difference, Russian время (vremya) and English time are cognates from PIE *wer- (to turn).",
+      "next_location": "Archive",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Russian": "время", "English": "time", "PIE": "*wer-"}
+    },
+    {
+      "id": 20,
+      "language": "Arvanitika",
+      "category": "etymology",
+      "text": "In Arvanitika, vellai means brother. What is the Greek equivalent?",
+      "clue": "Arvanitika: vellai",
+      "answer": "Αδελφός",
+      "wrong_answers": ["Φίλος", "Γιος", "Άνδρας"],
+      "hint": "Greek for male sibling.",
+      "explanation": "Arvanitika vellai comes from Albanian vëlla. Greek αδελφός (adelfós) is unrelated, showing different language families living together.",
+      "next_location": "Church",
+      "item": null,
+      "difficulty": 2,
+      "related_words": {"Arvanitika": "vellai", "Greek": "αδελφός", "Albanian": "vëlla"}
+    },
+    {
+      "id": 21,
+      "language": "PIE",
+      "category": "etymology",
+      "text": "The PIE root *wódr̥ means water. What word in English, Greek, and Russian descends from this?",
+      "clue": "PIE: *wódr̥",
+      "answer": "Water / Hydro / Вода",
+      "wrong_answers": ["Fire / Pyro / Огонь", "Earth / Geo / Земля", "Air / Aero / Воздух"],
+      "hint": "The most common liquid on Earth.",
+      "explanation": "English water, Greek ὕδωρ (hudor/hydro-), and Russian вода (voda) all come from PIE *wódr̥. Shows the wide reach of this root.",
+      "next_location": "Library",
+      "item": null,
+      "difficulty": 3,
+      "related_words": {"PIE": "*wódr̥", "English": "water", "Greek": "ὕδωρ", "Russian": "вода"}
+    },
+    {
+      "id": 22,
+      "language": "Greek",
+      "category": "etymology",
+      "text": "In Greek, the word for soul or spirit is ψυχή (psyche). What English word derives from this?",
+      "clue": "ψυχή (psyche)",
+      "answer": "Psychology",
+      "wrong_answers": ["Spirit", "Mind", "Soul"],
+      "hint": "The study of the mind.",
+      "explanation": "From Greek ψυχή (psykhē, soul, mind). English psychology, psyche, and psychiatrist all derive from this.",
+      "next_location": "Church",
+      "item": "Psychology Notes",
+      "difficulty": 2,
+      "related_words": {"Greek": "ψυχή", "English": "psychology", "German": "Psychologie"}
+    },
+    {
+      "id": 23,
+      "language": "German",
+      "category": "etymology",
+      "text": "In German, the word for king is König. What Old English word is cognate with this?",
+      "clue": "German: König",
+      "answer": "Cyning",
+      "wrong_answers": ["King", "Leader", "Chief"],
+      "hint": "The Old English word for king.",
+      "explanation": "German König and Old English cyning both come from PIE *ǵenh₁- (to produce, beget). Modern English king evolved from cyning.",
+      "next_location": "Archive",
+      "item": "Royal Seal",
+      "difficulty": 2,
+      "related_words": {"German": "König", "Old English": "cyning", "English": "king"}
+    },
+    {
+      "id": 24,
+      "language": "Spanish",
+      "category": "etymology",
+      "text": "In Spanish, the word for friend is amigo. What Latin word does this come from?",
+      "clue": "Spanish: amigo",
+      "answer": "Amicus",
+      "wrong_answers": ["Amor", "Anima", "Amore"],
+      "hint": "Think of the Latin word for friend.",
+      "explanation": "Spanish amigo comes from Latin amicus (friend). English amity and amiable also derive from this Latin root.",
+      "next_location": "Cafe",
+      "item": null,
+      "difficulty": 1,
+      "related_words": {"Spanish": "amigo", "Latin": "amicus", "English": "amiable"}
+    },
+    {
+      "id": 25,
+      "language": "Russian",
+      "category": "etymology",
+      "text": "In Russian, дом (dom) means house. What English word shares a similar meaning and ancient root?",
+      "clue": "дом (dom)",
+      "answer": "Domestic",
+      "wrong_answers": ["Home", "Building", "Shelter"],
+      "hint": "Think of an adjective form.",
+      "explanation": "Russian дом (dom, house) and English domestic (from Latin domesticus) both come from PIE *dṓm (house). Shows how roots appear in different forms.",
+      "next_location": "Archive",
+      "item": null,
+      "difficulty": 2,
+      "related_words": {"Russian": "дом", "Latin": "domus", "English": "domestic"}
+    },
+    {
+      "id": 26,
+      "language": "Arvanitika",
+      "category": "etymology",
+      "text": "In Arvanitika, the word for father is ati. What is the Albanian word?",
+      "clue": "Arvanitika: ati",
+      "answer": "Atë",
+      "wrong_answers": ["Babai", "Nënë", "Vëlla"],
+      "hint": "It means father.",
+      "explanation": "Arvanitika ati comes directly from Albanian atë (father). Shows the direct Albanian lineage of Arvanitika.",
+      "next_location": "Church",
+      "item": "Family History",
+      "difficulty": 2,
+      "related_words": {"Arvanitika": "ati", "Albanian": "atë", "Greek": "πατέρας"}
+    },
+    {
+      "id": 27,
+      "language": "PIE",
+      "category": "etymology",
+      "text": "The PIE root *méh₂tēr means mother. What words in Greek, Latin, and English descend from this?",
+      "clue": "PIE: *méh₂tēr",
+      "answer": "Mother / Mater / Mother",
+      "wrong_answers": ["Father / Pater / Father", "Sister / Soror / Sister", "Daughter / Filia / Daughter"],
+      "hint": "Think of the female parent.",
+      "explanation": "Greek μήτηρ (mḗtēr), Latin māter, and English mother all descend from PIE *méh₂tēr. One of the most stable words across all Indo-European languages.",
+      "next_location": "Church",
+      "item": null,
+      "difficulty": 2,
+      "related_words": {"PIE": "*méh₂tēr", "Greek": "μήτηρ", "Latin": "māter", "English": "mother"}
+    },
+    {
+      "id": 28,
+      "language": "Greek",
+      "category": "etymology",
+      "text": "In Greek, the word for word or speech is λόγος (logos). What English words derive from this?",
+      "clue": "λόγος (logos)",
+      "answer": "Logic / Biology / Dialogue",
+      "wrong_answers": ["Language", "Speech", "Word"],
+      "hint": "Think of words ending in -logy or -logue.",
+      "explanation": "From Greek λόγος (logos, word, reason, speech). English logic, biology, dialogue, monologue all derive from this productive root.",
+      "next_location": "Library",
+      "item": "Logos Manuscript",
+      "difficulty": 2,
+      "related_words": {"Greek": "λόγος", "English": "logic", "English": "biology", "English": "dialogue"}
+    },
+    {
+      "id": 29,
+      "language": "German",
+      "category": "etymology",
+      "text": "In German, the word for hand is Hand. What Old Norse word is cognate with this?",
+      "clue": "German: Hand",
+      "answer": "Hönd",
+      "wrong_answers": ["Arm", "Finger", "Wrist"],
+      "hint": "Old Norse for hand.",
+      "explanation": "German Hand and Old Norse hönd (hand) both come from PIE *ǵʰeh₁n- (to grasp, seize). English hand also comes from the same root.",
+      "next_location": "Archive",
+      "item": "Glove",
+      "difficulty": 2,
+      "related_words": {"German": "Hand", "Old Norse": "hönd", "English": "hand"}
+    },
+    {
+      "id": 30,
+      "language": "Russian",
+      "category": "etymology",
+      "text": "In Russian, знание (znaniye) means knowledge. What Slavic root does this come from?",
+      "clue": "знание (znaniye)",
+      "answer": "Znat",
+      "wrong_answers": ["Vedyat", "Chitat", "Pisat"],
+      "hint": "The verb form means to know.",
+      "explanation": "Russian знание (knowledge) comes from знать (znat, to know). Related to English know through PIE *ǵneh₃-. Shows the verb-noun relationship in Slavic.",
+      "next_location": "Archive",
+      "item": "Knowledge Scroll",
+      "difficulty": 2,
+      "related_words": {"Russian": "знание", "Russian": "знать", "English": "know", "PIE": "*ǵneh₃-"}
+    }
+  ],
+  "locations": [
+    {
+      "id": "ClientOffice",
+      "name": "Weber's Private Office",
+      "description": "The dim glow of a desk lamp illuminates stacks of case files. Berlin, 1947. A typewriter sits silent, waiting. On the desk, a note in Greek catches your eye. Elena Weber, a linguist, has disappeared. The only clue: a trail of etymological breadcrumbs.",
+      "riddle_id": 1,
+      "first_riddle_id": 1
+    },
+    {
+      "id": "Library",
+      "name": "Staatsbibliothek",
+      "description": "Tall shelves stretch into shadow. Ancient manuscripts in Greek, German, Latin. The air smells of parchment and secrets. A librarian eyes you suspiciously from behind a desk piled with indices.",
+      "riddle_id": 3,
+      "first_riddle_id": 3
+    },
+    {
+      "id": "Cafe",
+      "name": "Café Mozart",
+      "description": "The scent of strong coffee and sugar hangs in the air. Intellectuals and spies share tables in the dim light. A waiter polishes a glass, watching. This is where linguists used to meet. Some still do.",
+      "riddle_id": 2,
+      "first_riddle_id": 2
+    },
+    {
+      "id": "Church",
+      "name": "St. Nicholas Church",
+      "description": "Candlelight flickers against stone walls. The sacristan moves silently between shadows. Old texts in Greek and Latin line the shelves. The Babel Society has left its mark here. You can feel it.",
+      "riddle_id": 6,
+      "first_riddle_id": 6
+    },
+    {
+      "id": "Archive",
+      "name": "Secret Archive",
+      "description": "Files upon files of linguistic research. The Babel Society\'s true work is here. Volkov, their leader, has been one step ahead. But you\'re closing in. The final pieces of the puzzle are within reach.",
+      "riddle_id": 4,
+      "first_riddle_id": 4
+    }
+  ],
+  "characters": [
+    {
+      "id": "Weber",
+      "name": "Elena Weber",
+      "description": "A brilliant linguist who vanished while investigating the Babel Society. Her research into Proto-Indo-European could change everything.",
+      "dialogue": [
+        "I need your help, detective. The Babel Society is real, and they\'ve got their hands on something dangerous.",
+        "They\'re using language itself as a weapon. If we can\'t stop them...",
+        "Find the connections. The roots. They\'re the key to everything."
+      ]
+    },
+    {
+      "id": "Librarian",
+      "name": "Herr Schmidt",
+      "description": "The head librarian at Staatsbibliothek. Knows more than he lets on. Has been helping Elena in secret.",
+      "dialogue": [
+        "She was here just last week. Asking about Proto-Indo-European again.",
+        "I told her it was dangerous. Some knowledge should stay buried.",
+        "Take this. She left it for you."
+      ]
+    },
+    {
+      "id": "Waiter",
+      "name": "Karl the Waiter",
+      "description": "Has worked at Café Mozart for 20 years. Knows everyone who comes through the door. Has a good memory for languages too.",
+      "dialogue": [
+        "The men in the dark suits? They come in every Tuesday. Always order the same thing.",
+        "She sat in the corner, with her notebooks. Always writing, always thinking.",
+        "They were speaking Russian. But not just Russian... something older."
+      ]
+    },
+    {
+      "id": "Sacristan",
+      "name": "Father Thomas",
+      "description": "The sacristan at St. Nicholas. Has seen strange things in these old walls. More than he should have.",
+      "dialogue": [
+        "The church has secrets, detective. Some older than the building itself.",
+        "They come at night. Always checking the old manuscripts.",
+        "The word of God... twisted. That\'s what they\'re doing here."
+      ]
+    },
+    {
+      "id": "Volkov",
+      "name": "Igor Volkov",
+      "description": "Leader of the Babel Society. Ruthless, brilliant. Believes that by controlling language, he can control thought itself.",
+      "dialogue": [
+        "You\'re too late, detective. The work is already done.",
+        "Language is power. And power belongs to those who understand the roots.",
+        "Join us. Or become another footnote in history."
+      ]
+    }
+  ]
+};
+
+        // Global state
+        let currentRiddle = null;
+        let currentLocation = null;
+        let gameState = {
+            visitedLocations: [],
+            solvedRiddles: [],
+            inventory: [],
+            sanity: 3,
+            score: 0,
+            maxSanity: 3
+        };
+        let autoSaveEnabled = true;
+
+        // Animated dots for loading
+        const dots = ['', '.', '..', '...'];
+        let dotIndex = 0;
+        const dotsElement = document.getElementById('dots');
+        
+        setInterval(() => {
+            dotIndex = (dotIndex + 1) % dots.length;
+            if (dotsElement) {
+                dotsElement.textContent = dots[dotIndex];
+            }
+        }, 500);
+
+        // Initialize game
+        function initGame() {
+            document.getElementById('loading').hidden = true;
+            updateUI();
+            
+            const startLoc = db.locations.find(l => l.id === "ClientOffice");
+            if (startLoc) {
+                showLocation(startLoc);
+            } else if (db.riddles.length > 0) {
+                showRiddle(db.riddles[0]);
+            } else {
+                document.getElementById('loading').innerHTML = '<p>No riddles found.</p>';
+            }
+        }
+
+        function loadSavedGame() {
+            const saved = localStorage.getItem('babelConspiracyAutoSave');
+            if (saved) {
+                try {
+                    const savedState = JSON.parse(saved);
+                    gameState = { ...gameState, ...savedState };
+                } catch (e) {
+                    console.error('Error loading save:', e);
+                }
+            }
+            updateSaveSlots();
+        }
+
+        // Load saved game and start
+        loadSavedGame();
+        initGame();
+
+        function updateSaveSlots() {
+            for (let i = 1; i <= 3; i++) {
+                const saved = localStorage.getItem(`babelConspiracySave${i}`);
+                const infoEl = document.getElementById(`slot${i}-info`);
+                if (saved) {
+                    try {
+                        const state = JSON.parse(saved);
+                        infoEl.textContent = `Score: ${state.score}, Sanity: ${state.sanity}, Riddles: ${state.solvedRiddles.length}`;
+                    } catch (e) {
+                        infoEl.textContent = 'Corrupted';
+                    }
+                } else {
+                    infoEl.textContent = 'Empty';
+                }
+            }
+        }
+
+        function toggleSaveMenu() {
+            const menu = document.getElementById('save-menu');
+            menu.classList.toggle('visible');
+            updateSaveSlots();
+        }
+
+        function saveGame(slot) {
+            localStorage.setItem(`babelConspiracySave${slot}`, JSON.stringify(gameState));
+            if (autoSaveEnabled) {
+                localStorage.setItem('babelConspiracyAutoSave', JSON.stringify(gameState));
+            }
+            updateSaveSlots();
+            toggleSaveMenu();
+        }
+
+        function loadGame(slot) {
+            const saved = localStorage.getItem(`babelConspiracySave${slot}`);
+            if (saved) {
+                try {
+                    gameState = JSON.parse(saved);
+                    restartGame();
+                    toggleSaveMenu();
+                } catch (e) {
+                    console.error('Error loading save:', e);
+                }
+            }
+        }
+
+        // Update UI
+        function updateUI() {
+            // Sanity meter
+            const sanityIcons = document.getElementById('sanity-icons');
+            if (sanityIcons) {
+                let icons = '';
+                for (let i = 0; i < gameState.maxSanity; i++) {
+                    if (i < gameState.sanity) {
+                        icons += '♥';
+                    } else {
+                        icons += '♡';
+                    }
+                }
+                sanityIcons.innerHTML = icons;
+                sanityIcons.className = gameState.sanity > 1 ? 'sanity-full' : 
+                                           gameState.sanity > 0 ? 'sanity-low' : 'sanity-critical';
+            }
+            
+            // Score
+            const scoreEl = document.getElementById('score');
+            if (scoreEl) {
+                scoreEl.textContent = gameState.score;
+            }
+            
+            // Inventory
+            const inventoryEl = document.getElementById('inventory');
+            if (inventoryEl) {
+                inventoryEl.innerHTML = '';
+                gameState.inventory.forEach(item => {
+                    const itemEl = document.createElement('span');
+                    itemEl.className = 'item';
+                    itemEl.textContent = item;
+                    inventoryEl.appendChild(itemEl);
+                });
+            }
+            
+            // Auto-save
+            if (autoSaveEnabled) {
+                localStorage.setItem('babelConspiracyAutoSave', JSON.stringify(gameState));
+            }
+            
+            // Check for game over
+            if (gameState.sanity <= 0) {
+                showGameOver();
+            }
+        }
+
+        function showLocation(location) {
+            currentLocation = location;
+            if (!gameState.visitedLocations.includes(location.id)) {
+                gameState.visitedLocations.push(location.id);
+            }
+            
+            let html = `
+                <div class="passage">
+                    <div class="location">:: ${location.name.toUpperCase()} ::</div>
+                    <p>${location.description}</p>
+            `;
+
+            // Add character dialogue
+            const character = findCharacterForLocation(location.id);
+            if (character) {
+                html += `<p class="dialogue">"${character.dialogue[0]}"</p>`;
+            }
+
+            // Find the riddle for this location
+            const riddleId = location.riddle_id || location.first_riddle_id;
+            const riddle = db.riddles.find(r => r.id === riddleId);
+            
+            if (riddle) {
+                currentRiddle = riddle;
+                html += `
+                    <div class="clue">${riddle.clue}</div>
+                    <p><em>${riddle.text}</em></p>
+                    <p>
+                `;
+                
+                // Show answer options
+                const allAnswers = [riddle.answer, ...riddle.wrong_answers];
+                const shuffled = shuffleArray(allAnswers);
+                
+                shuffled.forEach(ans => {
+                    const escaped = ans.replace(/'/g, "&#39;");
+                    html += `<a href="#" onclick="checkAnswer('${escaped}'); return false;">${ans}</a> `;
+                });
+                
+                html += `
+                    </p>
+                    <div id="hint-container" style="display:none;">
+                        <p class="hint">Hint: ${riddle.hint || 'Think carefully...'}</p>
+                        <a href="#" onclick="showHint(); return false;" id="show-hint-btn">Show hint</a>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+            updateUI();
+        }
+
+        function showRiddle(riddle) {
+            currentRiddle = riddle;
+            
+            let html = `
+                <div class="passage">
+                    <h2>Riddle: ${riddle.language}</h2>
+                    <div class="clue">${riddle.clue}</div>
+                    <p><em>${riddle.text}</em></p>
+                    <p>
+            `;
+            
+            const allAnswers = [riddle.answer, ...riddle.wrong_answers];
+            const shuffled = shuffleArray(allAnswers);
+            
+            shuffled.forEach(ans => {
+                const escaped = ans.replace(/'/g, "&#39;");
+                html += `<a href="#" onclick="checkAnswer('${escaped}'); return false;">${ans}</a> `;
+            });
+            
+            html += `
+                    </p>
+                    <div id="hint-container" style="display:none;">
+                        <p class="hint">Hint: ${riddle.hint || 'Think carefully...'}</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+            updateUI();
+        }
+
+        function checkAnswer(selected) {
+            const correct = selected === currentRiddle.answer;
+            
+            // Remove all passage content except the current one
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach((p, index) => {
+                if (index < passages.length - 1) {
+                    p.remove();
+                }
+            });
+            
+            const lastPassage = document.querySelector('.passage');
+            
+            if (correct) {
+                if (!gameState.solvedRiddles.includes(currentRiddle.id)) {
+                    gameState.solvedRiddles.push(currentRiddle.id);
+                }
+                gameState.score += currentRiddle.difficulty * 10;
+                
+                // Add item to inventory if it exists
+                if (currentRiddle.item && !gameState.inventory.includes(currentRiddle.item)) {
+                    gameState.inventory.push(currentRiddle.item);
+                }
+                
+                updateUI();
+                
+                let html = `
+                    <p class="correct">✓ Correct!</p>
+                    <p><strong>${currentRiddle.answer}</strong></p>
+                    <p>${currentRiddle.explanation}</p>
+                `;
+                
+                // Show collected item
+                if (currentRiddle.item) {
+                    html += `<p class="correct">You collected: <strong>${currentRiddle.item}</strong></p>`;
+                }
+                
+                // Progress to next location
+                if (currentRiddle.next_location) {
+                    const nextLoc = db.locations.find(l => l.id === currentRiddle.next_location);
+                    if (nextLoc) {
+                        html += `<p><a href="#" onclick="goToLocation('${currentRiddle.next_location}'); return false;">Continue to ${nextLoc.name}</a></p>`;
+                    } else {
+                        html += `<p><a href="#" onclick="showRandomRiddle(); return false;">Continue investigating</a></p>`;
+                    }
+                } else {
+                    html += `<p><a href="#" onclick="showRandomRiddle(); return false;">Next riddle</a></p>`;
+                }
+                
+                lastPassage.innerHTML += html;
+            } else {
+                gameState.sanity -= 1;
+                updateUI();
+                
+                let html = `
+                    <p class="wrong">✗ Wrong.</p>
+                    <p><em>${selected}</em> is not the answer.</p>
+                    <p><strong>You lose 1 Sanity point!</strong></p>
+                    <p>
+                        <a href="#" onclick="retryRiddle(); return false;">Try again</a>
+                        <a href="#" onclick="showHint(); return false;" id="show-hint-btn">Show hint</a>
+                    </p>
+                `;
+                lastPassage.innerHTML += html;
+            }
+        }
+
+        function retryRiddle() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            if (currentLocation) {
+                showLocation(currentLocation);
+            } else {
+                showRiddle(currentRiddle);
+            }
+        }
+
+        function showHint() {
+            const hintContainer = document.getElementById('hint-container');
+            if (hintContainer) {
+                hintContainer.style.display = 'block';
+            }
+            const btn = document.getElementById('show-hint-btn');
+            if (btn) btn.remove();
+        }
+
+        function showRandomRiddle() {
+            const unsolved = db.riddles.filter(r => !gameState.solvedRiddles.includes(r.id));
+            if (unsolved.length > 0) {
+                const randomRiddle = unsolved[Math.floor(Math.random() * unsolved.length)];
+                const passages = document.querySelectorAll('.passage');
+                passages.forEach(p => p.remove());
+                showRiddle(randomRiddle);
+            } else {
+                showEnding();
+            }
+        }
+
+        function showGameOver() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            
+            const html = `
+                <div class="passage game-over">
+                    <h1>GAME OVER</h1>
+                    <p>Volkov's men found you first.</p>
+                    <div class="stats">
+                        <p><strong>Riddles solved:</strong> ${gameState.solvedRiddles.length} of ${db.riddles.length}</p>
+                        <p><strong>Items collected:</strong> ${gameState.inventory.length}</p>
+                        <p><strong>Final score:</strong> ${gameState.score}</p>
+                    </div>
+                    <p>The Babel Society wins. For now.</p>
+                    <p class="nav"><a href="#" onclick="restartGame(); return false;">Retry Case</a></p>
+                </div>
+            `;
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+        }
+
+        function showEnding() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            
+            // Determine which ending
+            const allRiddlesSolved = gameState.solvedRiddles.length >= db.riddles.length;
+            const allItemsCollected = gameState.inventory.length >= db.riddles.filter(r => r.item).length;
+            const highScore = gameState.score >= 200;
+            
+            let title = 'Case Closed';
+            let description = 'You solved the case, but Volkov escaped with the manuscript.';
+            
+            if (allRiddlesSolved && allItemsCollected) {
+                title = 'The Truth Revealed';
+                description = 'With all clues and the complete Babel Manuscript, you expose the Babel Society to the world.';
+            } else if (allRiddlesSolved || highScore) {
+                title = 'Partial Victory';
+                description = 'You solve the case and recover the manuscript, but Volkov escapes.';
+            } else if (gameState.solvedRiddles.length >= db.riddles.length / 2) {
+                title = 'A Lead, Not a Victory';
+                description = 'You gather enough evidence to close Elena\'s case, but the Babel Society remains.';
+            }
+            
+            const html = `
+                <div class="passage ending">
+                    <h1>${title}</h1>
+                    <p>${description}</p>
+                    <div class="stats">
+                        <p><strong>Riddles solved:</strong> ${gameState.solvedRiddles.length} of ${db.riddles.length}</p>
+                        <p><strong>Items collected:</strong> ${gameState.inventory.length} of ${db.riddles.filter(r => r.item).length}</p>
+                        <p><strong>Sanity remaining:</strong> ${gameState.sanity}</p>
+                        <p><strong>Final score:</strong> ${gameState.score}</p>
+                    </div>
+                    <p><em>All our words are connected.</em></p>
+                    <p class="nav"><a href="#" onclick="restartGame(); return false;">New Case</a></p>
+                </div>
+            `;
+            document.getElementById('loading').insertAdjacentHTML('afterend', html);
+            document.getElementById('loading').hidden = true;
+        }
+
+        function restartGame() {
+            const passages = document.querySelectorAll('.passage');
+            passages.forEach(p => p.remove());
+            
+            gameState = {
+                visitedLocations: [],
+                solvedRiddles: [],
+                inventory: [],
+                sanity: 3,
+                score: 0,
+                maxSanity: 3
+            };
+            currentRiddle = null;
+            currentLocation = null;
+            
+            document.getElementById('loading').hidden = false;
+            document.getElementById('loading').innerHTML = '<p>Restarting case... <span id="dots"></span>';
+            
+            // Reload saved game to reset UI
+            loadSavedGame();
+            // Force fresh start
+            gameState = {
+                visitedLocations: [],
+                solvedRiddles: [],
+                inventory: [],
+                sanity: 3,
+                score: 0,
+                maxSanity: 3
+            };
+            initGame();
+        }
+
+        function findCharacterForLocation(locId) {
+            const locationMap = {
+                "ClientOffice": "Weber",
+                "Library": "Librarian",
+                "Cafe": "Waiter",
+                "Church": "Sacristan",
+                "Archive": "Volkov"
+            };
+            const charId = locationMap[locId];
+            return db.characters.find(c => c.id === charId);
+        }
+
+        function goToLocation(locId) {
+            const loc = db.locations.find(l => l.id === locId);
+            if (loc) {
+                showLocation(loc);
+            } else {
+                showRandomRiddle();
+            }
+        }
+
+        function shuffleArray(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
+    </script>
+</body>
+</html>
