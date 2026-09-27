@@ -242,6 +242,15 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(e.state.unlocked_locations, ["ClientOffice", "Library"])
         self.assertEqual(e.state.sanity, 2)
 
+    def test_separate_save_dirs_do_not_mix(self):
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            first, second = GameEngine(Path(a)), GameEngine(Path(b))
+            r = first.current_riddle()
+            first.answer(r, r.answer)
+            self.assertFalse(second.load_game(0))
+            self.assertEqual(second.notebook, [])
+            self.assertTrue(GameEngine(Path(a)).load_game(0))
+
     def test_autosave_feeds_continue(self):
         self.solve_here()
         fresh = GameEngine()

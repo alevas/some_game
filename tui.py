@@ -7,6 +7,10 @@ Run with: python tui.py
 """
 
 import random
+import signal
+import sys
+import tempfile
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from rich.text import Text
@@ -801,13 +805,24 @@ class NoirApp(App):
     Footer {{ background: #141414; }}
     """
 
-    def __init__(self):
+    def __init__(self, save_dir: Optional[Path] = None):
         super().__init__()
-        self.engine = GameEngine()
+        self.engine = GameEngine(save_dir)
 
     def on_mount(self):
         self.push_screen(TitleScreen())
 
 
+def main():
+    if "--web" not in sys.argv:
+        NoirApp().run()
+        return
+    # Served to a browser (serve.py): every session is its own process, so give each one
+    # a private save folder that disappears with it, instead of sharing the server's saves.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # closing the tab still cleans up
+    with tempfile.TemporaryDirectory(prefix="noir-session-") as save_dir:
+        NoirApp(Path(save_dir)).run()
+
+
 if __name__ == "__main__":
-    NoirApp().run()
+    main()

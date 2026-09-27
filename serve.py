@@ -8,7 +8,7 @@ Run with: python serve.py                  (then open http://localhost:8000)
           python serve.py --port 9000
           python serve.py --public-url https://example.com   (behind a proxy or tunnel)
 
-Every browser tab gets its own game. Save files live on the machine running this server.
+Every browser tab gets its own game with its own saves, which last until the tab is closed.
 """
 
 import argparse
@@ -27,7 +27,7 @@ def main():
     args = parser.parse_args()
 
     tui = Path(__file__).resolve().parent / "tui.py"
-    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(tui))}"
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(tui))} --web"
     Server(command, host=args.host, port=args.port, title="Noir Language Riddles",
            public_url=args.public_url).serve()
 

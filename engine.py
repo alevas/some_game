@@ -455,10 +455,12 @@ class GameEngine:
 
     SAVE_DIR = Path.home() / ".babel_conspiracy_saves"
 
-    def __init__(self):
+    def __init__(self, save_dir: Optional[Path] = None):
         self.state = GameState()
         self.riddles = {r.id: r for r in RIDDLES}
         self.locations = LOCATIONS
+        if save_dir is not None:
+            self.SAVE_DIR = Path(save_dir)  # e.g. a private folder per web session
         self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
         self.notebook = self._load_notebook()
 
