@@ -8,10 +8,11 @@ Run with: python main_polished.py
 """
 
 import os
+import random
 from typing import List, Optional
 
 import art
-from engine import GameEngine, Riddle, STORY_ORDER, LOCATIONS
+from engine import GameEngine, Riddle, LOCATIONS, ELENA_QUESTION, ELENA_OPTIONS
 
 
 # =============================================================================
@@ -78,24 +79,30 @@ class TextUI:
     def print_status(self):
         s = self.engine.state
         hearts = "".join(c("♥", "red") if i < s.sanity else c("♡", "bright_black") for i in range(s.max_sanity))
+        streak = "◆" * (s.streak % 3) + "◇" * (3 - s.streak % 3)
         print(f"\n{c('SANITY: ', 'bright_white')}{hearts} "
-              f"{c(f'| SCORE: {s.score} | EVIDENCE: {len(s.inventory)}/{self.engine.total_items()}', 'bright_white')}")
+              f"{c(f'| SCORE: {s.score} | STREAK: {streak} | EVIDENCE: {len(s.inventory)}/{self.engine.total_items()}', 'bright_white')}")
         print(rule())
 
-    def print_location(self):
+    def print_location(self, mood: str = "neutral", reaction: Optional[str] = None):
         loc = self.engine.location()
         print(c(art.SCENES[loc.id], 'bright_black'))
         print(c(f':: {loc.name.upper()} ::', 'bright_yellow'))
         print(c(loc.description, "white"))
 
-        if self.engine.current_riddle() is None:
+        beats = self.engine.beats_unlocked(loc.id)
+        if reaction:
+            line = f'"{reaction}"'
+        elif self.engine.current_riddle() is None:
             line = f'"{loc.done_text}"'
+        elif beats:
+            line = f'"{beats[-1]}"'
         else:
             line = f'"{loc.greeting}"'
-        print(c(art.PORTRAITS[loc.character], 'white'))
+        print(c(art.PORTRAITS[loc.character][mood], 'white'))
         print(c(f"{loc.character}:", 'bright_yellow'), c(line, 'italic'))
 
-    def print_riddle(self, riddle: Riddle, options: List[str], wrong: List[int]):
+    def print_riddle(self, riddle: Riddle, options: List[str], eliminated: List[str]):
         is_lead = riddle.id == self.engine.location().lead_riddle
         print(f"\n{rule('yellow', '-')}")
         print(c(f"[{'LEAD' if is_lead else 'Riddle'}: {riddle.language}]", 'bright_cyan'))
@@ -105,15 +112,14 @@ class TextUI:
 
         print(f"\n{c('Answer choices:', 'bright_white')}")
         for i, option in enumerate(options, 1):
-            if i - 1 in wrong:
-                print(c(f"  [{i}] {option}  (wrong)", 'bright_black'))
-            else:
-                print(f"  {c(f'[{i}]', 'yellow')} {option}")
+            print(f"  {c(f'[{i}]', 'yellow')} {option}")
+        if eliminated:
+            print(c(f"\n  Ruled out: {', '.join(eliminated)}", 'bright_black'))
         self.print_commands()
 
     def print_commands(self):
         print()
-        print(c("[t] Travel   [m] Menu", 'bright_black'))
+        print(c("[n] Notes   [t] Travel   [m] Menu", 'bright_black'))
         if self.engine.can_confront():
             print(c("[v] Confront Volkov (ends the case)", 'bright_red'))
 
@@ -129,6 +135,32 @@ class TextUI:
         tagline = "All our words are connected." if self.engine.all_riddles_solved() else "The Babel Society wins. For now."
         print(f"\n{c(tagline, 'italic')}")
         pause()
+
+    def print_notes(self):
+        print(f"\n{rule()}\n{c('          CASE NOTES', 'bright_white')}\n{rule()}")
+        notes = self.engine.case_notes()
+        current = None
+        for place, note in notes:
+            if place != current:
+                print(c(f"\n{place.upper()}", 'bright_yellow'))
+                current = place
+            print(f"  · {note}")
+        if not notes:
+            print(c("\nNothing yet. Solve riddles and people will start talking.", 'bright_black'))
+        pause()
+
+    def ask_elena(self) -> str:
+        """The final deduction. Returns the chosen place."""
+        while True:
+            print(f"\n{rule('red')}\n{c(ELENA_QUESTION, 'bright_red')}\n{rule('red')}\n")
+            for i, place in enumerate(ELENA_OPTIONS, 1):
+                print(f"{c(f'[{i}]', 'yellow')} {place}")
+            print(f"\n{c('[n] Review your case notes first', 'bright_black')}")
+            choice = ask()
+            if choice == "n":
+                self.print_notes()
+            elif choice.isdigit() and 1 <= int(choice) <= len(ELENA_OPTIONS):
+                return ELENA_OPTIONS[int(choice) - 1]
 
     def choose_location(self) -> Optional[str]:
         """Travel menu. Returns loc_id or None."""
@@ -194,27 +226,41 @@ class TextUI:
 # MAIN GAME LOOP
 # =============================================================================
 
+def finish_case(engine: GameEngine, ui: TextUI):
+    """Final deduction, ending screen, and a fresh case"""
+    clear_screen()
+    guess = ui.ask_elena()
+    clear_screen()
+    ui.print_end(*engine.get_ending(guess), 'green')
+    engine.new_game()
+
+
 def play(engine: GameEngine, ui: TextUI):
     """Run one case until it ends or the player returns to the main menu"""
     while True:
         riddle = engine.current_riddle()
         options = engine.shuffled_options(riddle) if riddle else []
-        wrong: List[int] = []
+        eliminated: List[str] = []
+        mood, reaction = "neutral", None
+        loc = engine.location()
 
         # Ask the current riddle until it is solved or the player does something else
         while True:
             clear_screen()
             ui.print_header()
             ui.print_status()
-            ui.print_location()
+            ui.print_location(mood, reaction)
             if riddle:
-                ui.print_riddle(riddle, options, wrong)
+                ui.print_riddle(riddle, options, eliminated)
                 choice = ask("Your answer: ")
             else:
                 print(c("\nYou've turned this place inside out. Time to follow another lead.", 'bright_black'))
                 ui.print_commands()
                 choice = ask()
 
+            if choice == "n":
+                ui.print_notes()
+                continue
             if choice == "t":
                 dest = ui.choose_location()
                 if dest:
@@ -226,41 +272,48 @@ def play(engine: GameEngine, ui: TextUI):
                     return
                 break
             if choice == "v" and engine.can_confront():
-                clear_screen()
-                ui.print_end(*engine.get_ending(), 'green')
-                engine.new_game()
+                finish_case(engine, ui)
                 return
-            if not (riddle and choice.isdigit() and 1 <= int(choice) <= len(options)) or int(choice) - 1 in wrong:
+            if not (riddle and choice.isdigit() and 1 <= int(choice) <= len(options)):
                 continue
 
-            idx = int(choice) - 1
-            result = engine.answer(riddle, options[idx])
+            picked = options[int(choice) - 1]
+            result = engine.answer(riddle, picked)
             if not result.correct:
-                wrong.append(idx)
+                options = engine.replace_wrong_option(riddle, options, picked, eliminated)
+                mood, reaction = "bad", random.choice(loc.bad_lines) if loc.bad_lines else None
                 if engine.is_game_over():
                     clear_screen()
                     print(c(art.GAME_OVER, 'red'))
                     ui.print_end("GAME OVER", "Volkov's men found you first.", 'red')
                     engine.new_game()
                     return
-                print(c("\n✗ WRONG! You lose 1 Sanity point.", 'red'))
+                print(c("\n✗ WRONG! You lose 1 Sanity point. The answers blur and rearrange.", 'red'))
                 if ask("[h] Show hint, Enter to try again: ") == "h":
                     print(c(f"\nHint: {riddle.hint}", 'bright_magenta'))
                     pause()
                 continue
 
-            # Correct
+            # Correct: redraw with the character's reaction, then the payoff
+            clear_screen()
+            ui.print_header()
+            ui.print_status()
+            ui.print_location("good", random.choice(loc.good_lines) if loc.good_lines else None)
             print(f"\n{c('✓ CORRECT!', 'green')} {c(riddle.explanation, 'white')}")
             if riddle.item:
                 if result.item_gained:
                     print(c(f"\nEvidence collected: {riddle.item}", 'bright_green'))
                 else:
                     print(c(f"\nYou fumbled earlier. The {riddle.item} slipped through your fingers.", 'bright_black'))
+            if result.streak_bonus:
+                print(c(f"Streak x{engine.state.streak}: +{result.streak_bonus} bonus", 'bright_yellow'))
+            if result.heart_restored:
+                print(c("Three clean answers in a row steady your nerve. +1 ♥", 'bright_red'))
+            if result.beat:
+                print(c(f'\nNEW NOTE: {loc.character}: "{result.beat}"', 'bright_cyan'))
             if engine.all_riddles_solved():
                 pause()
-                clear_screen()
-                ui.print_end(*engine.get_ending(), 'green')
-                engine.new_game()
+                finish_case(engine, ui)
                 return
             if result.unlocked:
                 new_loc = LOCATIONS[result.unlocked]

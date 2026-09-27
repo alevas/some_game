@@ -6,6 +6,7 @@ Full-screen ASCII art version (needs Textual: pip install -r requirements.txt)
 Run with: python tui.py
 """
 
+import random
 from typing import List, Optional, Tuple
 
 from rich.text import Text
@@ -17,7 +18,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 import art
-from engine import GameEngine, AnswerResult, STORY_ORDER, LOCATIONS
+from engine import GameEngine, AnswerResult, STORY_ORDER, LOCATIONS, ELENA_QUESTION, ELENA_OPTIONS
 
 
 AMBER = "#e0b050"
@@ -140,6 +141,36 @@ def load_modal(engine: GameEngine) -> ChoiceModal:
 # GAME
 # =============================================================================
 
+class NotesScreen(ModalScreen[None]):
+    """Everything the detective has learned, to piece together where Elena is"""
+
+    BINDINGS = [Binding("escape,enter,n", "close", "Close")]
+
+    def __init__(self, engine: GameEngine):
+        super().__init__()
+        self.engine = engine
+
+    def compose(self) -> ComposeResult:
+        body = Text()
+        notes = self.engine.case_notes()
+        current = None
+        for place, note in notes:
+            if place != current:
+                body.append(f"\n{place.upper()}\n", style=f"bold {AMBER}")
+                current = place
+            body.append(f" · {note}\n", style=PAPER)
+        if not notes:
+            body.append("\nNothing yet. Solve riddles and people will start talking.\n", style=SMOKE)
+        body.append("\nPress Enter to close", style=SMOKE)
+        with Vertical(classes="dialog notes"):
+            yield Static(heading("Case notes"))
+            with VerticalScroll():
+                yield Static(body)
+
+    def action_close(self):
+        self.dismiss(None)
+
+
 class GameScreen(Screen):
     BINDINGS = [
         Binding("1", "answer(0)", "Answer", show=False),
@@ -149,6 +180,7 @@ class GameScreen(Screen):
         Binding("enter", "next", "Continue"),
         Binding("g", "go", "Follow lead"),
         Binding("h", "hint", "Hint"),
+        Binding("n", "notes", "Notes"),
         Binding("t", "travel", "Travel"),
         Binding("v", "confront", "Confront Volkov"),
         Binding("m,escape", "menu", "Menu"),
@@ -159,9 +191,11 @@ class GameScreen(Screen):
         self.mode = "question"          # "question" or "result"
         self.riddle = None
         self.options: List[str] = []
-        self.wrong_picks: List[int] = []
+        self.eliminated: List[str] = []  # wrong picks, swapped out for decoys
         self.hint_shown = False
         self.last: Optional[AnswerResult] = None
+        self.mood = "neutral"            # portrait expression
+        self.reaction: Optional[str] = None
 
     @property
     def engine(self) -> GameEngine:
@@ -187,9 +221,11 @@ class GameScreen(Screen):
         self.mode = "question"
         self.riddle = self.engine.current_riddle()
         self.options = self.engine.shuffled_options(self.riddle) if self.riddle else []
-        self.wrong_picks = []
+        self.eliminated = []
         self.hint_shown = False
         self.last = None
+        self.mood = "neutral"
+        self.reaction = None
         self.render_all()
 
     def render_all(self):
@@ -200,7 +236,7 @@ class GameScreen(Screen):
         scene.append(loc.description, style=PAPER)
         self.query_one("#scene", Static).update(scene)
 
-        self.query_one("#portrait", Static).update(Text(art.PORTRAITS[loc.character], style=PAPER))
+        self.query_one("#portrait", Static).update(Text(art.PORTRAITS[loc.character][self.mood], style=PAPER))
         self.query_one("#dialogue", Static).update(self.render_dialogue())
         self.query_one("#riddle", Static).update(
             self.render_result() if self.mode == "result" else self.render_question())
@@ -208,22 +244,29 @@ class GameScreen(Screen):
         self.refresh_bindings()
 
     def render_dialogue(self) -> Text:
+        """Most important line wins: a new lead, a new beat, a reaction, then small talk"""
         loc = self.engine.location()
         t = Text()
         t.append(f"\n{loc.character}\n", style=f"bold {AMBER}")
         if self.last and self.last.unlocked:
             t.append(loc.lead_text, style=f"italic {PAPER}")
-        elif self.riddle is None and self.mode == "question":
+        elif self.last and self.last.beat:
+            t.append(f'"{self.last.beat}"', style=f"italic {PAPER}")
+            t.append("\n(added to your case notes)", style=SMOKE)
+        elif self.reaction:
+            t.append(f'"{self.reaction}"', style=f"italic {PAPER}")
+        elif self.riddle is None:
             t.append(f'"{loc.done_text}"', style=f"italic {PAPER}")
         else:
-            t.append(f'"{loc.greeting}"', style=f"italic {PAPER}")
+            beats = self.engine.beats_unlocked(loc.id)
+            t.append(f'"{beats[-1] if beats else loc.greeting}"', style=f"italic {PAPER}")
         return t
 
     def render_question(self) -> Text:
         t = Text()
         if not self.riddle:
             t.append("You've turned this place inside out.\n\n", style=PAPER)
-            t.append("Press t to follow another lead.", style=SMOKE)
+            t.append("Press t to follow another lead, n to review your notes.", style=SMOKE)
             if self.engine.can_confront():
                 t.append("\nPress v to confront Volkov.", style=BLOOD)
             return t
@@ -234,18 +277,16 @@ class GameScreen(Screen):
         t.append(f"Clue: {r.clue}\n\n", style="bold #c49bd8")
         t.append(f"{r.text}\n\n", style=PAPER)
         for i, option in enumerate(self.options):
-            if i in self.wrong_picks:
-                t.append(f"  [{i + 1}] {option}\n", style=f"strike {SMOKE}")
-            else:
-                t.append(f"  [{i + 1}] ", style=AMBER)
-                t.append(f"{option}\n", style=PAPER)
-        if self.wrong_picks:
+            t.append(f"  [{i + 1}] ", style=AMBER)
+            t.append(f"{option}\n", style=PAPER)
+        if self.eliminated:
             s = self.engine.state
-            t.append(f"\n✗ Wrong. You lose your nerve. Sanity {s.sanity}/{s.max_sanity}.", style=BLOOD)
+            t.append(f"\n✗ Wrong. The answers blur and rearrange. Sanity {s.sanity}/{s.max_sanity}.\n", style=BLOOD)
+            t.append(f"Ruled out: {', '.join(self.eliminated)}", style=f"strike {SMOKE}")
             if self.hint_shown:
                 t.append(f"\nHint: {r.hint}", style="#c49bd8")
             else:
-                t.append("  Press h for a hint.", style=SMOKE)
+                t.append("\nPress h for a hint.", style=SMOKE)
         return t
 
     def render_result(self) -> Text:
@@ -256,9 +297,14 @@ class GameScreen(Screen):
         t.append(f"{r.explanation}\n", style=PAPER)
         if r.item:
             if res.item_gained:
-                t.append(f"\nEvidence collected: {r.item}\n", style=MOSS)
+                t.append(f"\nEvidence collected: {r.item}", style=MOSS)
             else:
-                t.append(f"\nYou fumbled earlier. The {r.item} slipped through your fingers.\n", style=SMOKE)
+                t.append(f"\nYou fumbled earlier. The {r.item} slipped through your fingers.", style=SMOKE)
+        if res.streak_bonus:
+            t.append(f"\nStreak x{self.engine.state.streak}: +{res.streak_bonus} bonus", style=AMBER)
+        if res.heart_restored:
+            t.append("\nThree clean answers in a row steady your nerve. +1 ♥", style=BLOOD)
+        t.append("\n")
         if res.unlocked:
             t.append(f"\nNEW LEAD: {LOCATIONS[res.unlocked].name}\n", style=f"bold {AMBER}")
             t.append("Press g to go now, or Enter to keep digging here.", style=SMOKE)
@@ -273,7 +319,11 @@ class GameScreen(Screen):
         t.append("Sanity  ", style=SMOKE)
         for i in range(s.max_sanity):
             t.append("♥" if i < s.sanity else "♡", style=BLOOD if i < s.sanity else SMOKE)
-        t.append(f"\nScore   {s.score}\n\n", style=SMOKE)
+        t.append(f"\nScore   {s.score}\n", style=SMOKE)
+        t.append("Streak  ", style=SMOKE)
+        # Progress toward the next heart
+        t.append("◆" * (s.streak % 3) + "◇" * (3 - s.streak % 3), style=AMBER)
+        t.append("\n\n")
 
         t.append(f"EVIDENCE {len(s.inventory)}/{self.engine.total_items()}\n", style=f"bold {AMBER}")
         for item in s.inventory:
@@ -291,6 +341,8 @@ class GameScreen(Screen):
                          style=f"bold {PAPER}" if here else PAPER)
             else:
                 t.append("  ???\n", style=SMOKE)
+        t.append(f"\nNOTES {len(self.engine.case_notes())}", style=f"bold {AMBER}")
+        t.append("  (press n)", style=SMOKE)
         return t
 
     # --- Actions -------------------------------------------------------------
@@ -298,25 +350,30 @@ class GameScreen(Screen):
     def check_action(self, action: str, parameters: tuple) -> Optional[bool]:
         asking = self.mode == "question" and self.riddle is not None
         if action == "answer":
-            i = parameters[0]
-            return asking and i < len(self.options) and i not in self.wrong_picks
+            return asking and parameters[0] < len(self.options)
         if action == "next":
             return self.mode == "result"
         if action == "go":
             return self.mode == "result" and bool(self.last and self.last.unlocked)
         if action == "hint":
-            return asking and bool(self.wrong_picks) and not self.hint_shown
+            return asking and bool(self.eliminated) and not self.hint_shown
         if action == "confront":
             return self.engine.can_confront()
         return True
 
     def action_answer(self, i: int):
-        result = self.engine.answer(self.riddle, self.options[i])
+        loc = self.engine.location()
+        picked = self.options[i]
+        result = self.engine.answer(self.riddle, picked)
         if result.correct:
             self.mode = "result"
             self.last = result
+            self.mood = "good"
+            self.reaction = random.choice(loc.good_lines) if loc.good_lines else None
         else:
-            self.wrong_picks.append(i)
+            self.options = self.engine.replace_wrong_option(self.riddle, self.options, picked, self.eliminated)
+            self.mood = "bad"
+            self.reaction = random.choice(loc.bad_lines) if loc.bad_lines else None
             if self.engine.is_game_over():
                 self.app.push_screen(
                     EndScreen(self.engine, "GAME OVER", "Volkov's men found you first.", won=False),
@@ -337,6 +394,9 @@ class GameScreen(Screen):
     def action_hint(self):
         self.hint_shown = True
         self.render_all()
+
+    def action_notes(self):
+        self.app.push_screen(NotesScreen(self.engine))
 
     def action_travel(self):
         s = self.engine.state
@@ -359,7 +419,17 @@ class GameScreen(Screen):
         ]), lambda choice: self.end_case() if choice == "yes" else None)
 
     def end_case(self):
-        title, text = self.engine.get_ending()
+        """Ask where Elena is, then show the ending"""
+        choices = [(str(i), place, True) for i, place in enumerate(ELENA_OPTIONS)]
+        choices.append(("notes", "(Review your case notes first)", True))
+        self.app.push_screen(ChoiceModal(ELENA_QUESTION, choices), self._elena_answered)
+
+    def _elena_answered(self, choice: Optional[str]):
+        if choice is None or choice == "notes":
+            # Back out of the question to the notes; the question comes back afterwards
+            self.app.push_screen(NotesScreen(self.engine), lambda _: self.end_case())
+            return
+        title, text = self.engine.get_ending(ELENA_OPTIONS[int(choice)])
         self.app.push_screen(EndScreen(self.engine, title, text, won=True), self._back_to_title)
 
     def _back_to_title(self, _=None):
@@ -367,15 +437,18 @@ class GameScreen(Screen):
         self.app.switch_screen(TitleScreen())
 
     def action_menu(self):
-        self.app.push_screen(ChoiceModal("Case notes", [
+        self.app.push_screen(ChoiceModal("Menu", [
             ("back", "Back to the case", True),
+            ("notes", "Case notes", True),
             ("save", "Save", True),
             ("load", "Load", True),
             ("title", "Title screen", True),
         ]), self._menu_choice)
 
     def _menu_choice(self, choice: Optional[str]):
-        if choice == "save":
+        if choice == "notes":
+            self.action_notes()
+        elif choice == "save":
             self.app.push_screen(ChoiceModal("Save to slot", [
                 (str(i), f"Slot {i}: {label}", True) for i, _, label in self.engine.get_save_slots()
             ]), self._saved)
@@ -413,11 +486,13 @@ class NoirApp(App):
     #title-box {{ align: center middle; width: 100%; height: 100%; }}
     #title-box Static {{ width: auto; }}
     #title-menu {{ width: 40; height: auto; background: #0b0b0b; border: round {AMBER}; }}
-    ChoiceModal, EndScreen {{ align: center middle; background: rgba(0, 0, 0, 0.7); }}
+    ChoiceModal, EndScreen, NotesScreen {{ align: center middle; background: rgba(0, 0, 0, 0.7); }}
     .dialog {{ width: 60; height: auto; background: #141414; border: heavy {AMBER}; padding: 1 2; }}
     .dialog OptionList {{ height: auto; background: #141414; border: none; }}
     .dialog-title {{ margin-bottom: 1; }}
     .end {{ width: 70; }}
+    .notes {{ width: 90; max-height: 80%; }}
+    .notes VerticalScroll {{ height: auto; max-height: 30; }}
     OptionList > .option-list--option-highlighted {{ background: {AMBER}; color: #0b0b0b; text-style: bold; }}
     Footer {{ background: #141414; }}
     """
