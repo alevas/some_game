@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import art
-from engine import GameEngine, LOCATIONS, RIDDLES, ELENA_ANSWER, ELENA_OPTIONS
+from engine import GameEngine, LOCATIONS, RIDDLES, VOLKOV_RIDDLES, ELENA_ANSWER, ELENA_OPTIONS, SHOWDOWN_ROUNDS
 
 
 class EngineTest(unittest.TestCase):
@@ -26,15 +26,14 @@ class EngineTest(unittest.TestCase):
             e.answer(r, "__wrong__")
         return e.answer(r, r.answer)
 
-    def play_through(self, wrong_on_items=False):
+    def play_through(self):
         """Solve every riddle, following the story in order"""
         e = self.engine
         while not e.all_riddles_solved():
             if e.current_riddle() is None:
                 nxt = next(l.id for l in e.unlocked_locations() if e.progress(l.id)[0] < e.progress(l.id)[1])
                 e.travel(nxt)
-            r = e.current_riddle()
-            self.solve_here(wrong_first=wrong_on_items and bool(r.item))
+            self.solve_here()
             e.state.sanity = e.state.max_sanity  # keep the run alive
 
     # --- Data -----------------------------------------------------------------
@@ -43,11 +42,20 @@ class EngineTest(unittest.TestCase):
         placed = sorted(i for loc in LOCATIONS.values() for i in self.engine.riddles_at(loc.id))
         self.assertEqual(placed, sorted(r.id for r in RIDDLES))
 
-    def test_options_are_unique_and_answer_is_not_a_decoy(self):
-        for r in RIDDLES:
-            options = [r.answer] + r.wrong_answers + r.decoys
-            self.assertEqual(len({o.lower() for o in options}), len(options), r.id)
-            self.assertLessEqual(len(r.wrong_answers) + 1, 4, f"riddle {r.id} has more options than number keys")
+    def test_riddles_are_well_formed(self):
+        ids = [r.id for r in RIDDLES + VOLKOV_RIDDLES]
+        self.assertEqual(len(ids), len(set(ids)))
+        for r in RIDDLES + VOLKOV_RIDDLES:
+            if r.kind == "choice":
+                options = [r.answer] + r.wrong_answers + r.decoys
+                self.assertEqual(len({o.lower() for o in options}), len(options), r.id)
+                self.assertLessEqual(len(r.wrong_answers) + 1, 4, f"riddle {r.id} has more options than number keys")
+                self.assertEqual(len(r.decoys), 2, r.id)
+            elif r.kind == "match":
+                self.assertEqual(r.answer, "|".join(right for _, right in r.pairs), r.id)
+            else:
+                self.assertEqual(r.kind, "type", r.id)
+                self.assertFalse(r.wrong_answers, r.id)
 
     def test_every_character_has_every_mood(self):
         for loc in LOCATIONS.values():
@@ -56,6 +64,89 @@ class EngineTest(unittest.TestCase):
 
     def test_elena_answer_is_an_option(self):
         self.assertIn(ELENA_ANSWER, ELENA_OPTIONS)
+        self.assertNotEqual(ELENA_OPTIONS[0], ELENA_ANSWER, "the default highlight would give it away")
+
+    def test_presentable_evidence_exists(self):
+        items = {r.item for r in RIDDLES if r.item}
+        for loc in LOCATIONS.values():
+            for item in loc.present:
+                self.assertIn(item, items, loc.id)
+
+    # --- Riddle kinds -------------------------------------------------------------
+
+    def test_typed_answers_are_forgiving(self):
+        foot = self.engine.riddles[31]
+        for response in ["foot", " Foot. ", "FEET"]:
+            self.assertTrue(GameEngine.is_correct(foot, response), response)
+        self.assertFalse(GameEngine.is_correct(foot, "hand"))
+
+    def test_match_letters(self):
+        e = self.engine
+        r = e.riddles[36]
+        shown = ["boss", "advice", "to receive"]
+        self.assertTrue(GameEngine.is_correct(r, e.match_response(r, shown, "b c a")))
+        self.assertFalse(GameEngine.is_correct(r, e.match_response(r, shown, "abc")))
+        self.assertIsNone(e.match_response(r, shown, "AAB"))
+        self.assertIsNone(e.match_response(r, shown, "AB"))
+
+    def test_cipher_wheel_helps(self):
+        e = self.engine
+        cipher = e.riddles[39]
+        self.assertIsNone(e.item_help(cipher))
+        e.state.inventory.append("Cipher Wheel")
+        self.assertIn("three", e.item_help(cipher))
+
+    # --- Evidence ---------------------------------------------------------------
+
+    def test_presenting_evidence_reveals_a_note(self):
+        e = self.engine
+        self.solve_here()  # Case File
+        e.travel("Library")
+        self.assertIsNone(e.present("Lantern"))
+        text = e.present("Case File")
+        self.assertIn("St. Nicholas", text)
+        self.assertTrue(any("shown the Case File" in note for _, note in e.case_notes()))
+
+    def test_spending_evidence(self):
+        e = self.engine
+        self.solve_here()
+        self.assertTrue(e.spend_item("Case File"))
+        self.assertEqual(e.state.inventory, [])
+        self.assertFalse(e.spend_item("Case File"))
+
+    # --- Showdown ---------------------------------------------------------------
+
+    def test_showdown_win(self):
+        sd = self.engine.start_showdown()
+        while not sd.finished:
+            sd.answer(sd.current.answer)
+        self.assertTrue(sd.won)
+
+    def test_showdown_dodge_with_evidence(self):
+        e = self.engine
+        e.state.inventory = ["A", "B", "C"]
+        sd = e.start_showdown()
+        for item in ["A", "B", "C"]:
+            self.assertTrue(sd.dodge(item))
+        self.assertTrue(sd.won)
+        self.assertEqual(e.state.inventory, [])
+
+    def test_showdown_loss(self):
+        e = self.engine
+        sd = e.start_showdown()
+        for _ in range(e.state.sanity):
+            self.assertFalse(sd.answer("__wrong__"))
+        self.assertTrue(sd.finished)
+        self.assertFalse(sd.won)
+        self.assertEqual(len(sd.riddles), SHOWDOWN_ROUNDS)
+
+    # --- Notebook ---------------------------------------------------------------
+
+    def test_notebook_survives_new_cases(self):
+        e = self.engine
+        self.solve_here()
+        e.new_game()
+        self.assertEqual([r.id for r in GameEngine().notebook_entries()], [1])
 
     # --- Progression ------------------------------------------------------------
 
@@ -115,26 +206,27 @@ class EngineTest(unittest.TestCase):
 
     def test_perfect_run_with_right_deduction(self):
         self.play_through()
-        title, text = self.engine.get_ending(ELENA_ANSWER)
+        title, text = self.engine.get_ending(ELENA_ANSWER, volkov_beaten=True)
         self.assertEqual(title, "The Truth Revealed")
         self.assertIn("alive", text)
 
     def test_wrong_deduction_blocks_best_ending(self):
         self.play_through()
-        title, text = self.engine.get_ending(ELENA_OPTIONS[1])
+        title, text = self.engine.get_ending(ELENA_OPTIONS[1], volkov_beaten=True)
         self.assertEqual(title, "Partial Victory")
         self.assertIn("never seen again", text)
 
-    def test_fumbled_evidence_blocks_best_ending(self):
-        self.play_through(wrong_on_items=True)
-        self.assertEqual(self.engine.get_ending(ELENA_ANSWER)[0], "Partial Victory")
+    def test_losing_the_showdown_blocks_best_ending(self):
+        self.play_through()
+        self.assertEqual(self.engine.get_ending(ELENA_ANSWER, volkov_beaten=False)[0], "A Lead, Not a Victory")
 
     def test_early_confrontation_endings(self):
         e = self.engine
-        self.assertEqual(e.get_ending(ELENA_ANSWER)[0], "Case Closed")
-        for rid in list(e.riddles)[:15]:
+        self.assertEqual(e.get_ending(ELENA_ANSWER, False)[0], "Case Closed")
+        self.assertEqual(e.get_ending(ELENA_ANSWER, True)[0], "Partial Victory")
+        for rid in list(e.riddles)[:len(e.riddles) // 2 + 1]:
             e.state.solved_riddles.append(rid)
-        self.assertEqual(e.get_ending(ELENA_ANSWER)[0], "A Lead, Not a Victory")
+        self.assertEqual(e.get_ending(ELENA_ANSWER, False)[0], "A Lead, Not a Victory")
 
     # --- Saving -----------------------------------------------------------------
 

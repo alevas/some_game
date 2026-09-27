@@ -7,10 +7,14 @@ The case is a chain of locations. Each location holds its own riddles plus one
 "lead" riddle. The lead shows up once enough of the location's riddles are
 solved, and solving it unlocks the next location. You can move on early and
 come back later, but evidence you skip counts against you at the end.
+
+Evidence is also currency: show it to characters to learn more, trade it for a
+hint, or throw it at Volkov in the final showdown to dodge a question.
 """
 
 import json
 import random
+import re
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Tuple
@@ -34,6 +38,18 @@ class Riddle:
     item: Optional[str] = None
     difficulty: int = 1
     decoys: List[str] = field(default_factory=list)  # swapped in after a wrong pick
+    # "choice": pick one of the options
+    # "type":   type the word (answer plus any `accepted` spellings)
+    # "match":  pair each left-hand word with its right-hand partner; answer is the partners joined by "|"
+    kind: str = "choice"
+    accepted: List[str] = field(default_factory=list)
+    pairs: List[Tuple[str, str]] = field(default_factory=list)
+    item_help: Optional[Tuple[str, str]] = None  # (evidence, extra help shown while you hold it)
+
+    def display_answer(self) -> str:
+        if self.kind == "match":
+            return ", ".join(f"{left} = {right}" for left, right in self.pairs)
+        return self.answer
 
 
 @dataclass
@@ -52,6 +68,7 @@ class Location:
     beats: List[Tuple[int, str]] = field(default_factory=list)  # (riddles solved here, what you learn)
     good_lines: List[str] = field(default_factory=list)  # reactions to a clean answer
     bad_lines: List[str] = field(default_factory=list)   # reactions to a slip
+    present: Dict[str, str] = field(default_factory=dict)  # evidence shown -> what the character reveals
 
 
 RIDDLES = [
@@ -209,7 +226,92 @@ RIDDLES = [
            "namaste", "To you", ["Hello", "Goodbye", "Peace"], "Namah = bow, te = to you.",
            "From Sanskrit namas (bow/reverence) + te (to you).", "Namaste Symbol", 2,
            decoys=['Thank you', 'Welcome']),
+
+    # Sound shifts: type the English cognate by applying Grimm's law
+    Riddle(31, "Latin", "sound shift",
+           "Latin 'pes, pedis' names a body part. Apply Grimm's law (p → f, d → t) to find its English cousin.",
+           "pes, pedis   (p → f, d → t)", "foot", [], "You stand on two of them.",
+           "Latin pes, pedis and English foot are cognates: Germanic shifted p to f and d to t (Grimm's law). "
+           "Pedal and pedestrian are later loans from the Latin.", None, 2, kind="type", accepted=["feet"]),
+
+    Riddle(32, "Latin", "sound shift",
+           "Latin 'tu' means 'you' (one person). Grimm's law turned t into th. What is the old English word, still heard in prayers?",
+           "tu   (t → th)", "thou", [], "'___ shalt not...'",
+           "Latin tu and English thou are cognates; t → th is Grimm's law. German kept du.",
+           None, 2, kind="type", accepted=["thee"]),
+
+    Riddle(33, "Latin", "sound shift",
+           "Latin 'centum' (said 'kentum') means a number. Grimm's law shifted k to h and t to d. What is it in English?",
+           "centum   (k → h, t → d)", "hundred", [], "Ten times ten.",
+           "Latin centum and English hundred share PIE *ḱm̥tóm: k → h and t → d are Grimm's law. "
+           "The -red was added later, from an old word for 'count'.", "Parish Ledger", 3, kind="type"),
+
+    Riddle(34, "Latin", "sound shift",
+           "Latin 'genu' is a body part. Grimm's law turned g into k. What is it in English? (The k is silent now.)",
+           "genu   (g → k)", "knee", [], "It bends when you kneel.",
+           "Latin genu and English knee are cognates: g → k is Grimm's law. "
+           "The k in 'knee' was pronounced until the 1600s.", None, 2, kind="type", accepted=["knees"]),
+
+    # Odd one out
+    Riddle(35, "Arabic", "odd one out", "Which of these is NOT a loanword from Arabic?",
+           "Arabic loanwords in English", "Tea", ["Algebra", "Alcohol", "Coffee"],
+           "One of these came from China, by sea.",
+           "Algebra (al-jabr), alcohol (al-kuḥl), coffee (qahwa), zero (ṣifr) and sofa (ṣuffa) are Arabic. "
+           "Tea comes from Chinese (Min dialect 'te'), brought by Dutch traders.", None, 2,
+           decoys=["Zero", "Sofa"]),
+
+    Riddle(38, "French", "odd one out",
+           "After 1066, Norman French gave English its words for meat. Which of these is NOT from French?",
+           "Norman French, 1066", "Sheep", ["Beef", "Pork", "Mutton"],
+           "Saxon farmers raised the animals; Norman lords ate the meat.",
+           "Beef (boeuf), pork (porc), mutton (mouton), veal and venison came with the Normans. "
+           "Sheep, cow and swine stayed Old English: the animal in the field, the French word on the plate.",
+           "Norman Menu", 2, decoys=["Veal", "Venison"]),
+
+    # Match the pairs
+    Riddle(36, "German", "false friends", "Match each German false friend to what it really means.",
+           "Rat · bekommen · Chef", "advice|to receive|boss", [],
+           "A German 'Chef' runs the office, not the kitchen.",
+           "Rat = advice (not a rodent), bekommen = to receive (not 'become'), Chef = boss (not a cook).",
+           "Waiter's Notepad", 2, kind="match",
+           pairs=[("Rat", "advice"), ("bekommen", "to receive"), ("Chef", "boss")]),
+
+    Riddle(37, "Greek", "cognates", "Match each Greek word to the English word built from it.",
+           "θεός · πῦρ · χρόνος", "theology|pyromaniac|chronicle", [], "πῦρ is fire.",
+           "θεός (theos) = god → theology; πῦρ (pyr) = fire → pyromaniac; χρόνος (chronos) = time → chronicle.",
+           None, 2, kind="match",
+           pairs=[("θεός (theos)", "theology"), ("πῦρ (pyr)", "pyromaniac"), ("χρόνος (chronos)", "chronicle")]),
+
+    # Elena's cipher: easier if you kept the Cipher Wheel
+    Riddle(39, "Cipher", "cipher", "Hidden in Volkov's files, a scrap of paper in Elena's hand. Decode it.",
+           "F U B S W", "crypt", [], "Each letter was moved the same number of places along the alphabet.",
+           "A Caesar cipher: every letter shifted three places forward. Elena was telling you where she is.",
+           None, 3, kind="type", item_help=("Cipher Wheel", "Your Cipher Wheel is set to 3: move each letter back three places.")),
 ]
+
+# The final showdown: Volkov picks three of these. They don't count toward the 39.
+VOLKOV_RIDDLES = [
+    Riddle(101, "Latin", "sound shift", "'Latin dens, dentis,' Volkov says. 'Grimm's law: d → t. The English word, detective?'",
+           "dens, dentis   (d → t)", "tooth", [], "",
+           "Dens, dentis and tooth share PIE *h₃dónts; d → t is Grimm's law, and English lost the n (compare German Zahn).",
+           kind="type", accepted=["teeth"]),
+    Riddle(102, "English", "family", "'Which living language is English's closest relative?'",
+           "West Germanic", "Frisian", ["German", "Danish", "Icelandic"], "",
+           "Frisian, spoken on the North Sea coast. 'Bread, butter and green cheese is good English and good Fries.'",
+           decoys=["Welsh", "Latin"]),
+    Riddle(103, "Sanskrit", "cognates", "'Match my Sanskrit to your English.'",
+           "pitṛ · bhrātṛ · dva", "father|brother|two", [], "",
+           "Sanskrit pitṛ, bhrātṛ and dva, English father, brother and two: all Proto-Indo-European.",
+           kind="match", pairs=[("पितृ (pitṛ)", "father"), ("भ्रातृ (bhrātṛ)", "brother"), ("द्व (dva)", "two")]),
+    Riddle(104, "Akkadian", "etymology", "Volkov smiles. 'Babel. In Akkadian, Bāb-ili meant what?'",
+           "Bāb-ili", "Gate of God", ["Confusion", "Tower of Heaven", "City of Tongues"], "",
+           "Akkadian bāb-ili = gate of god. The Bible ties Babel to Hebrew bālal, 'to confuse': a pun, not the origin.",
+           decoys=["House of Kings", "River Gate"]),
+]
+ALL_RIDDLES = {r.id: r for r in RIDDLES + VOLKOV_RIDDLES}
+SHOWDOWN_ROUNDS = 3
+SHOWDOWN_INTRO = ("Volkov steps out from between the cabinets. "
+                  "\"Words are my weapons, detective. Let us see yours.\"")
 
 LOCATIONS: Dict[str, Location] = {
     "ClientOffice": Location(
@@ -224,6 +326,7 @@ LOCATIONS: Dict[str, Location] = {
         beats=[(1, "She walked along the Spree every night. Said the water helped her think.")],
         good_lines=["You really can read it!", "Elena said you were good."],
         bad_lines=["Are you sure you know Greek?", "Please, take your time. For her sake."],
+        present={'Photograph': "That's Elena outside St. Nicholas, before the war. She loved that church. Said its crypt was older than Berlin itself."},
     ),
     "Library": Location(
         "Library", "Staatsbibliothek",
@@ -231,7 +334,7 @@ LOCATIONS: Dict[str, Location] = {
         "The air smells of parchment and secrets. A librarian eyes you suspiciously.",
         "Herr Schmidt",
         "She was here last week. Asking about Proto-Indo-European again. Always the old roots.",
-        riddle_ids=[3, 9, 11, 13, 20, 21, 26, 29], lead_riddle=2, leads_to="Cafe", lead_after=3,
+        riddle_ids=[3, 9, 31, 11, 13, 20, 35, 21, 26, 29], lead_riddle=2, leads_to="Cafe", lead_after=3,
         lead_text="Tucked in Elena's last book: a napkin from Café Mozart, with a table number and a time.",
         done_text="You've read more than most of my students, detective.",
         beats=[
@@ -241,6 +344,7 @@ LOCATIONS: Dict[str, Location] = {
         ],
         good_lines=["Hm. Not bad, for a policeman.", "Correct. Elena would approve."],
         bad_lines=["Tsk. Look it up, detective.", "My first-year students know that one."],
+        present={'Case File': "Her last call slip: the St. Nicholas plans. Stamped 'returned'. They were never returned."},
     ),
     "Cafe": Location(
         "Cafe", "Café Mozart",
@@ -248,7 +352,7 @@ LOCATIONS: Dict[str, Location] = {
         "share tables in the dim light. A waiter polishes a glass, watching.",
         "Karl",
         "The men in dark suits come in every Tuesday. Always order the same thing.",
-        riddle_ids=[5, 7, 10, 16, 18, 27], lead_riddle=24, leads_to="Church", lead_after=3,
+        riddle_ids=[5, 7, 32, 10, 16, 36, 18, 27], lead_riddle=24, leads_to="Church", lead_after=3,
         lead_text="Karl leans in: the men in suits always leave for St. Nicholas when the bells ring. They cross themselves on the way out.",
         done_text="No more gossip, detective. Just coffee.",
         beats=[
@@ -258,6 +362,7 @@ LOCATIONS: Dict[str, Location] = {
         ],
         good_lines=["Sharp. Like the coffee.", "Careful being that clever in here."],
         bad_lines=["Maybe stick to the coffee, detective.", "The suits are laughing at you."],
+        present={'Sugar Packet': "From table six, the suits' table. They always take extra sugar. 'For the lady,' they say."},
     ),
     "Church": Location(
         "Church", "St. Nicholas Church",
@@ -265,7 +370,7 @@ LOCATIONS: Dict[str, Location] = {
         "Old texts in Greek and Latin line the shelves. The Babel Society has left its mark here.",
         "Father Thomas",
         "The church has secrets, detective. Some older than the building itself.",
-        riddle_ids=[6, 8, 17, 23, 28], lead_riddle=12, leads_to="Archive", lead_after=2,
+        riddle_ids=[6, 8, 33, 17, 37, 23, 28], lead_riddle=12, leads_to="Archive", lead_after=2,
         lead_text="Father Thomas unlocks the parish register. Every Babel Society meeting is noted, and every entry points to a basement archive near the Spree.",
         done_text="Go with God. And be careful down there.",
         beats=[
@@ -275,6 +380,7 @@ LOCATIONS: Dict[str, Location] = {
         ],
         good_lines=["The Lord gave you a good ear.", "Yes... that is right."],
         bad_lines=["Pride comes before the fall, my son.", "Slowly. The old words do not hurry."],
+        present={'Arvanitika Notes': "Arvanitika... the sacristan's grandmother spoke it. He says the songs beneath the altar sound like this."},
     ),
     "Archive": Location(
         "Archive", "Secret Archive",
@@ -282,7 +388,7 @@ LOCATIONS: Dict[str, Location] = {
         "Volkov, their leader, has been one step ahead. But you're closing in.",
         "Igor Volkov",
         "You're too late. The work is already done.",
-        riddle_ids=[4, 14, 15, 19, 22, 25, 30],
+        riddle_ids=[4, 14, 34, 15, 19, 39, 22, 38, 25, 30],
         done_text="Every word traced to its root. Impressive. Now what, detective?",
         beats=[
             (2, "You think I would keep her here, among my papers? I am not sentimental."),
@@ -291,6 +397,7 @@ LOCATIONS: Dict[str, Location] = {
         ],
         good_lines=["...Lucky guess.", "So. You have done your reading."],
         bad_lines=["Ha! Elena would be ashamed of you.", "Every mistake brings my men closer, detective."],
+        present={'Religious Text': 'A hymnal? Put it away. I hear enough hymns from below as it is.'},
     ),
 }
 
@@ -325,6 +432,7 @@ class GameState:
     streak: int = 0  # riddles solved first try in a row
     visited_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     unlocked_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
+    presented: List[str] = field(default_factory=list)  # "location:item" pairs that revealed something
 
 
 @dataclass
@@ -352,6 +460,7 @@ class GameEngine:
         self.riddles = {r.id: r for r in RIDDLES}
         self.locations = LOCATIONS
         self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
+        self.notebook = self._load_notebook()
 
     # --- Queries -------------------------------------------------------------
 
@@ -401,6 +510,34 @@ class GameEngine:
         random.shuffle(new)
         return new
 
+    def match_options(self, riddle: Riddle) -> List[str]:
+        """The right-hand column of a match riddle, shuffled"""
+        rights = [right for _, right in riddle.pairs]
+        random.shuffle(rights)
+        return rights
+
+    def match_response(self, riddle: Riddle, shown: List[str], letters: str) -> Optional[str]:
+        """Turn typed letters (e.g. 'BCA') into an answer string, or None if they don't make sense"""
+        letters = re.sub(r"[^A-Za-z]", "", letters).upper()
+        indexes = [ord(ch) - ord("A") for ch in letters]
+        if len(indexes) != len(riddle.pairs) or sorted(indexes) != list(range(len(shown))):
+            return None
+        return "|".join(shown[i] for i in indexes)
+
+    @staticmethod
+    def is_correct(riddle: Riddle, response: str) -> bool:
+        if riddle.kind == "type":
+            def norm(word: str) -> str:
+                return re.sub(r"[^a-z]", "", word.lower())
+            return norm(response) in {norm(a) for a in [riddle.answer] + riddle.accepted}
+        return response.strip().lower() == riddle.answer.lower()
+
+    def item_help(self, riddle: Riddle) -> Optional[str]:
+        """Extra help for a riddle when you hold the right evidence"""
+        if riddle.item_help and riddle.item_help[0] in self.state.inventory:
+            return riddle.item_help[1]
+        return None
+
     def beats_unlocked(self, loc_id: str) -> List[str]:
         solved, _ = self.progress(loc_id)
         return [text for needed, text in self.locations[loc_id].beats if solved >= needed]
@@ -412,6 +549,9 @@ class GameEngine:
             if loc.lead_riddle in self.state.solved_riddles:
                 notes.append((loc.name, loc.lead_text))
             notes.extend((loc.name, f'{loc.character}: "{beat}"') for beat in self.beats_unlocked(loc.id))
+            for item, text in loc.present.items():
+                if f"{loc.id}:{item}" in self.state.presented:
+                    notes.append((loc.name, f'{loc.character}, shown the {item}: "{text}"'))
         return notes
 
     def unlocked_locations(self) -> List[Location]:
@@ -430,22 +570,21 @@ class GameEngine:
     def all_riddles_solved(self) -> bool:
         return len(self.state.solved_riddles) >= len(self.riddles)
 
-    def get_ending(self, elena_guess: Optional[str]) -> tuple:
-        """Determine ending from progress and where the detective looked for Elena"""
+    def get_ending(self, elena_guess: Optional[str], volkov_beaten: bool) -> tuple:
+        """Determine ending from progress, the showdown, and where the detective looked for Elena"""
         total_riddles = len(self.riddles)
         solved = len(self.state.solved_riddles)
-        collected = len(self.state.inventory)
         found = elena_guess == ELENA_ANSWER
 
-        if solved >= total_riddles and collected >= self.total_items() and found:
+        if volkov_beaten and found and solved >= total_riddles:
             title, text = ("The Truth Revealed",
-                           "With every clue in hand, you expose the Babel Society to the world.")
-        elif solved >= total_riddles:
+                           "Volkov leaves in handcuffs, and every root of the Babel Society is exposed to the world.")
+        elif volkov_beaten:
             title, text = ("Partial Victory",
-                           "You solve the case and recover the manuscript, but Volkov escapes.")
+                           "You outwit Volkov and the police take him away, but his society's members scatter into the night.")
         elif solved >= total_riddles / 2:
             title, text = ("A Lead, Not a Victory",
-                           "You gather evidence to close the case, but the Babel Society remains.")
+                           "Volkov slips out the back of the archive. You have enough to close the case, but the Babel Society remains.")
         else:
             title, text = ("Case Closed",
                            "You moved on Volkov with too little. He escapes with the manuscript.")
@@ -464,7 +603,7 @@ class GameEngine:
 
     def answer(self, riddle: Riddle, choice: str) -> AnswerResult:
         """Check an answer and update state"""
-        if choice.lower() != riddle.answer.lower():
+        if not self.is_correct(riddle, choice):
             self.state.sanity -= 1
             self.state.streak = 0
             if riddle.id not in self.state.fumbled_riddles:
@@ -473,6 +612,7 @@ class GameEngine:
             return AnswerResult(False, riddle)
 
         result = AnswerResult(True, riddle)
+        self.learn(riddle)
         loc = self.location()
         beats_before = len(self.beats_unlocked(loc.id))
         if riddle.id not in self.state.solved_riddles:
@@ -504,6 +644,27 @@ class GameEngine:
         self.autosave()
         return result
 
+    def present(self, item: str) -> Optional[str]:
+        """Show evidence to the character here. Returns what they reveal, or None."""
+        loc = self.location()
+        text = loc.present.get(item)
+        key = f"{loc.id}:{item}"
+        if text and key not in self.state.presented:
+            self.state.presented.append(key)
+            self.autosave()
+        return text
+
+    def spend_item(self, item: str) -> bool:
+        """Give up a piece of evidence (for a hint, or to dodge Volkov)"""
+        if item not in self.state.inventory:
+            return False
+        self.state.inventory.remove(item)
+        self.autosave()
+        return True
+
+    def start_showdown(self) -> "Showdown":
+        return Showdown(self)
+
     def travel(self, loc_id: str) -> bool:
         if loc_id not in self.state.unlocked_locations:
             return False
@@ -512,6 +673,25 @@ class GameEngine:
             self.state.visited_locations.append(loc_id)
         self.autosave()
         return True
+
+    # --- Etymology notebook (kept across cases) --------------------------------
+
+    def _load_notebook(self) -> List[int]:
+        try:
+            with open(self.SAVE_DIR / "notebook.json") as f:
+                return [i for i in json.load(f) if i in ALL_RIDDLES]
+        except (OSError, ValueError, TypeError):
+            return []
+
+    def learn(self, riddle: Riddle):
+        if riddle.id not in self.notebook:
+            self.notebook.append(riddle.id)
+            with open(self.SAVE_DIR / "notebook.json", "w") as f:
+                json.dump(self.notebook, f)
+
+    def notebook_entries(self) -> List[Riddle]:
+        """Everything learned so far, grouped by language"""
+        return sorted((ALL_RIDDLES[i] for i in self.notebook), key=lambda r: (r.language, r.id))
 
     # --- Saving --------------------------------------------------------------
 
@@ -564,3 +744,45 @@ class GameEngine:
             else:
                 slots.append((i, False, "Empty"))
         return slots
+
+
+class Showdown:
+    """The final duel: Volkov asks SHOWDOWN_ROUNDS riddles. A wrong answer costs a heart;
+    throwing a piece of evidence at him dodges the question. Lose your nerve and he escapes."""
+
+    def __init__(self, engine: GameEngine):
+        self.engine = engine
+        self.riddles = random.sample(VOLKOV_RIDDLES, SHOWDOWN_ROUNDS)
+        self.index = 0
+
+    @property
+    def current(self) -> Optional[Riddle]:
+        return None if self.finished else self.riddles[self.index]
+
+    @property
+    def lost(self) -> bool:
+        return self.engine.state.sanity <= 0
+
+    @property
+    def finished(self) -> bool:
+        return self.lost or self.index >= len(self.riddles)
+
+    @property
+    def won(self) -> bool:
+        return self.index >= len(self.riddles) and not self.lost
+
+    def answer(self, response: str) -> bool:
+        riddle = self.current
+        if self.engine.is_correct(riddle, response):
+            self.engine.learn(riddle)
+            self.engine.state.score += 30
+            self.index += 1
+            return True
+        self.engine.state.sanity -= 1
+        return False
+
+    def dodge(self, item: str) -> bool:
+        if not self.engine.spend_item(item):
+            return False
+        self.index += 1
+        return True

@@ -155,3 +155,55 @@ GAME_OVER = r"""
     _____|_____
    R . I . P .
 """
+
+SHOWDOWN_SCENE = r"""
+                          |
+                         _|_
+                        (   )
+                         '-'
+                      .   '   .
+        ___         .     '     .         _______
+      _|___|_      .      '      .      _|_______|_
+       (o_o)                             |=== ===|
+      /|   |\                            | \___/ |
+     / |___| \                            \__/__/
+       |   |                           ___|   |___
+       |   |                          /   |   |   \
+   ____|___|__________________________|___|___|____
+"""
+
+# The Berlin map for the travel screen. Labels are drawn onto it at these spots.
+_MAP = r"""
+.----------------------------------------------------------.
+|  N                                        BERLIN, 1947   |
+|  ^                                                       |
+|                                                          |
+|  ========== Unter den Linden ==========.                 |
+|                                         \                |
+|~~~~~~~~~~~~~~~.                          \               |
+|   S P R E E    ~~~~~~~~~~~.               \              |
+|                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+|                                                          |
+|                                                          |
+|                                                          |
+|                                                          |
+'----------------------------------------------------------'
+"""
+
+MAP_SPOTS = {
+    "Library": (3, 4),
+    "Cafe": (3, 34),
+    "Church": (9, 28),
+    "ClientOffice": (10, 4),
+    "Archive": (11, 36),
+}
+
+
+def berlin_map(labels: dict) -> str:
+    """Draw the map with a label per location id, e.g. {"Cafe": "[2] Café Mozart"}"""
+    rows = [list(line) for line in _MAP.strip("\n").split("\n")]
+    for loc_id, label in labels.items():
+        row, col = MAP_SPOTS[loc_id]
+        for i, ch in enumerate(label):
+            rows[row][col + i] = ch
+    return "\n" + "\n".join("".join(r) for r in rows) + "\n"
