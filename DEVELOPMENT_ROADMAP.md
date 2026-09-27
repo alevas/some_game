@@ -26,9 +26,11 @@ A noir detective game where players solve etymological riddles across Greek, Ger
 - Save/load system
 
 ### Files
-- `noir_game_optionA.html` - Main game
-- `riddles_db.json` - 50+ riddles
-- `app_brainstorm.md` - Original concept
+- `play.py` - Launcher (full-screen or console)
+- `tui.py` - Full-screen ASCII art version
+- `main_polished.py` - Console version
+- `engine.py` - Riddles, locations, story beats, game logic
+- `art.py` - Scenes and portraits
 
 ---
 
@@ -101,16 +103,24 @@ A noir detective game where players solve etymological riddles across Greek, Ger
 ## Quick Reference
 
 ### Add a Riddle
-Edit riddles_db.json with this template.
+Add a `Riddle(...)` to `RIDDLES` in `engine.py` (with two `decoys`), then add its id to a
+location's `riddle_ids`. Run `python -m unittest` to check it.
 
 ### Test
-1. Open noir_game_optionA.html
-2. Mobile: Chrome DevTools -> Toggle Device Toolbar
-3. Console: F12 for errors
+1. `python -m unittest`
+2. Play `python tui.py` in a 120x50 terminal
 
 ---
 
 ## Changelog
+
+### v0.6 - ASCII Art Overhaul (2026-09-27)
+- Full-screen ASCII art version (Textual) with scenes and reacting portraits
+- Location progression with leads, story beats and case notes
+- Final deduction: where is Elena?
+- Anti-guessing: decoy swaps, first-try streaks restore hearts
+- Riddle fact-check; all endings reachable
+- Launcher with console fallback; engine tests
 
 ### v0.5 - Core Complete (2026-09-24)
 - 50+ riddles

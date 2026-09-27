@@ -1,53 +1,46 @@
-SHARE THIS FILE WITH YOUR FRIEND
-===================================
+NOIR LANGUAGE RIDDLES: THE BABEL CONSPIRACY
+===========================================
 
-You have a standalone executable called "NoirRiddles" that works without needing Python installed!
-
-HOW TO RUN:
------------
-
-LINUX/MAC:
-  1. Copy the "NoirRiddles" file to any folder
-  2. Open a terminal in that folder
-  3. Make it executable: chmod +x NoirRiddles
-  4. Run it: ./NoirRiddles
-
-WINDOWS:
-  If your friend is on Windows, you'll need to create the executable on a Windows machine.
-  Instructions for them:
-  
-  pip install pyinstaller
-  pyinstaller --onefile --name "NoirRiddles" main_polished.py
-  
-  Then share the file from dist/NoirRiddles.exe
+Berlin, 1947. A linguist has disappeared. Solve etymological riddles,
+follow the leads across the city, and work out where Elena is being held.
 
 
-WHAT THEY NEED:
+HOW TO RUN (LINUX)
+------------------
+You got a single file called "NoirRiddles". No Python needed.
+
+  1. Open a terminal in the folder with the file
+  2. Make it executable:   chmod +x NoirRiddles
+  3. Run it:               ./NoirRiddles
+
+Make the terminal window big (at least 100 columns x 30 rows) BEFORE starting,
+to get the full-screen ASCII art version. In a smaller window the game starts
+in a plain console mode instead.
+
+
+WINDOWS OR MAC?
 ---------------
-- A modern computer (Windows, Mac, or Linux)
-- About 10MB of disk space
-- A terminal/command prompt
+The Linux file won't run there. Either:
+  - Ask Alex for a build made on your system, or
+  - Install Python 3.9+, then in the game folder run:
+        pip install -r requirements.txt
+        python play.py
 
 
-SAVE FILES:
------------
-The game will save progress to:
+CONTROLS
+--------
+  1-4    answer              h   hint (after a wrong answer)
+  Enter  continue            g   follow a new lead
+  n      case notes          t   travel
+  v      confront Volkov     m   menu (save / load)
+
+Tip: guessing doesn't work. Wrong answers get swapped for new ones.
+Read your case notes before you face Volkov.
+
+
+SAVE FILES
+----------
+The game autosaves. Choose "Continue" on the title screen to pick up again.
+Saves live in:
   Linux/Mac: ~/.babel_conspiracy_saves/
-  Windows: %USERPROFILE%\.babel_conspiracy_saves\
-
-They can continue their game later from the same computer.
-
-
-THE GAME:
----------
-"Noir Language Riddles: The Babel Conspiracy"
-
-Berlin, 1947. A linguist has disappeared. Solve etymological riddles across 7 languages 
-to uncover the truth about the mysterious Babel Society.
-
-- 30+ linguistic puzzles
-- 5 unique locations
-- Multiple endings
-- Noir atmosphere
-
-Controls: Enter numbers to select answers, type 'm' for menu.
+  Windows:   %USERPROFILE%\.babel_conspiracy_saves\
