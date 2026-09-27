@@ -29,13 +29,18 @@ The Linux file won't run there. Either:
 
 CONTROLS
 --------
-  1-4    answer              h   hint (after a wrong answer)
+  1-4    answer              h   hint
   Enter  continue            g   follow a new lead
-  n      case notes          t   travel
+  e      evidence            n   case notes
+  b      notebook            t   travel
   v      confront Volkov     m   menu (save / load)
 
-Tip: guessing doesn't work. Wrong answers get swapped for new ones.
-Read your case notes before you face Volkov.
+Some riddles want a typed answer: type it and press Enter (Esc gets you
+back to the single-key commands).
+
+Tips: guessing doesn't work, wrong answers get swapped for new ones.
+Show your evidence to people. Keep some for Volkov.
+Read your case notes before you face him.
 
 
 SAVE FILES

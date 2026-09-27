@@ -29,6 +29,7 @@ A noir detective game where players solve etymological riddles across Greek, Ger
 - `play.py` - Launcher (full-screen or console)
 - `tui.py` - Full-screen ASCII art version
 - `main_polished.py` - Console version
+- `serve.py` - Browser version (textual-serve)
 - `engine.py` - Riddles, locations, story beats, game logic
 - `art.py` - Scenes and portraits
 
@@ -103,8 +104,9 @@ A noir detective game where players solve etymological riddles across Greek, Ger
 ## Quick Reference
 
 ### Add a Riddle
-Add a `Riddle(...)` to `RIDDLES` in `engine.py` (with two `decoys`), then add its id to a
-location's `riddle_ids`. Run `python -m unittest` to check it.
+Add a `Riddle(...)` to `RIDDLES` in `engine.py`, then add its id to a location's `riddle_ids`.
+Multiple choice needs two `decoys`; typed riddles use `kind="type"` (plus `accepted` spellings);
+matching uses `kind="match"` with `pairs`. Run `python -m unittest` to check it.
 
 ### Test
 1. `python -m unittest`
@@ -113,6 +115,14 @@ location's `riddle_ids`. Run `python -m unittest` to check it.
 ---
 
 ## Changelog
+
+### v0.7 - Evidence & Showdown (2026-09-27)
+- Evidence can be shown to characters, traded for hints, or used against Volkov
+- Final showdown: three riddles from Volkov
+- New riddle types: sound shifts (typed), match the pairs, odd one out, a cipher (39 riddles)
+- Etymology notebook that persists across cases
+- Rain on the title screen, typewriter dialogue, Berlin map for travel
+- Play in the browser with serve.py
 
 ### v0.6 - ASCII Art Overhaul (2026-09-27)
 - Full-screen ASCII art version (Textual) with scenes and reacting portraits
