@@ -28,6 +28,10 @@ spelling, like the older riddles.
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/néwos,
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/h₁néwn̥,
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/wódr̥
+- **45** (clue, from clew 'ball of thread')
+  - https://www.etymonline.com/word/clue
+- **46** (nostalgia: nóstos 'homecoming' + álgos 'pain'; Hofer, Basel, 1688)
+  - https://www.etymonline.com/word/nostalgia
 
 ## Café Mozart (Cafe)
 
@@ -40,6 +44,26 @@ spelling, like the older riddles.
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/h₂ówis,
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/ḱwṓ,
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/h₂ŕ̥tḱos
+- **49** (odd one out: Spanish alma is Latin; the al- words are Arabic)
+  - https://en.wiktionary.org/wiki/alma (Spanish, from Latin anima)
+  - https://en.wiktionary.org/wiki/almohada, https://en.wiktionary.org/wiki/algodón,
+    https://en.wiktionary.org/wiki/alcalde, https://en.wiktionary.org/wiki/aceite,
+    https://en.wiktionary.org/wiki/azúcar
+- **50** (ojalá from Andalusian Arabic 'if God wills')
+  - https://en.wiktionary.org/wiki/ojalá
+- **51** (egg from Old Norse; Caxton's egges/eyren story, prologue to Eneydos, 1490)
+  - https://www.etymonline.com/word/egg
+  - https://en.wikisource.org/wiki/Prologue_to_the_Aeneids
+  - https://pius.slu.edu/special-collections/?p=4717 (the Foreland, in Kent)
+- **52** (match: Handschuh, Fingerhut, Nilpferd)
+  - https://en.wiktionary.org/wiki/Handschuh, https://en.wiktionary.org/wiki/Fingerhut,
+    https://en.wiktionary.org/wiki/Nilpferd
+- **53** (chauffeur 'stoker', from chauffer 'to heat')
+  - https://www.etymonline.com/word/chauffeur
+- **54** (Russian магазин 'shop', from Arabic makhāzin)
+  - https://en.wiktionary.org/wiki/магазин
+- **55** (jungle from Sanskrit jaṅgala 'arid, sparsely wooded')
+  - https://www.etymonline.com/word/jungle
 
 ## St. Nicholas Church (Church)
 
@@ -57,6 +81,18 @@ spelling, like the older riddles.
   - https://en.wiktionary.org/wiki/Reconstruction:Proto-Germanic/swestēr (the Germanic -t-)
   - Distractors: https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/bʰréh₂tēr,
     https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/suHnús
+- **59** (paradise: an Iranian word for a walled enclosure)
+  - https://www.etymonline.com/word/paradise
+  - https://en.wikipedia.org/wiki/Paradise
+- **60** (messiah and Christ both mean 'anointed')
+  - https://www.etymonline.com/word/messiah
+- **61** (enthusiasm from éntheos 'with a god inside')
+  - https://www.etymonline.com/word/enthusiasm
+- **62** (cemetery from koimētḗrion 'sleeping place')
+  - https://www.etymonline.com/word/cemetery
+- **63** (sound shift: Latin cornū, English horn)
+  - https://en.wiktionary.org/wiki/horn
+  - https://www.etymonline.com/word/unicorn, https://www.etymonline.com/word/cornet
 
 ## Secret Archive (Archive)
 
@@ -71,3 +107,13 @@ spelling, like the older riddles.
   - https://en.wiktionary.org/wiki/Reconstruction:Proto-Indo-European/wĺ̥kʷos
   - https://en.wiktionary.org/wiki/वृक, https://en.wiktionary.org/wiki/vilkas
   - https://en.wikipedia.org/wiki/Volkov_(surname)
+- **68** (Russian вокзал from Vauxhall, London)
+  - https://en.wiktionary.org/wiki/вокзал
+- **69** (window from Old Norse vindauga 'wind eye')
+  - https://www.etymonline.com/word/window
+- **70** (ransack from Old Norse rannsaka 'search a house')
+  - https://www.etymonline.com/word/ransack
+- **71** (sabotage from sabot 'wooden shoe')
+  - https://www.etymonline.com/word/sabotage
+- **72** (curfew from Old French cuevrefeu 'cover fire')
+  - https://www.etymonline.com/word/curfew

@@ -422,6 +422,46 @@ and *h₁néwn̥ 'nine'; *wódr̥ is 'water' and *méh₂tēr 'mother'.
 """
 item = "Calling Card"
 
+[[riddle]]
+id = 45
+location = "Library"
+language = "English"
+category = "etymology"
+clue = "clew"
+text = "A detective lives by clues. The word began as clew, a ball of something. Of what?"
+answer = "Thread"
+wrong_answers = ["Wax", "Clay"]
+decoys = ["Iron", "Glass"]
+hint = "Theseus unwound one to find his way out of the Labyrinth."
+explanation = """
+Clue is a respelling of clew, 'a ball of thread' (Old English cliewen). Ariadne gave Theseus
+a clew to lead him out of the Labyrinth, and so a clue became anything that shows the way
+through a puzzle.
+"""
+item = "Ball of Thread"
+
+[[riddle]]
+id = 46
+location = "Library"
+language = "Greek"
+category = "etymology"
+difficulty = 2
+clue = "νόστος + ἄλγος"
+text = """
+In 1688 a medical student at Basel built 'nostalgia' out of two Greek words: ἄλγος (álgos),
+'pain', and νόστος (nóstos). What is nóstos?
+"""
+answer = "Homecoming"
+wrong_answers = ["Memory", "Youth"]
+decoys = ["Old age", "Sleep"]
+hint = "Odysseus spent ten years trying to achieve one."
+explanation = """
+Johannes Hofer coined nostalgia in his Basel dissertation of 1688, from Greek nóstos
+'homecoming' and álgos 'pain', as a learned name for Heimweh, homesickness, which was then
+treated as a disease.
+"""
+item = "Old Postcard"
+
 # =============================================================================
 # CAFÉ MOZART  (location = "Cafe")
 # =============================================================================
@@ -609,6 +649,150 @@ explanation = """
 All four go back to PIE *gʷṓws, 'cattle'. The others are the horse (*h₁éḱwos), the sheep
 (*h₂ówis), the dog (*ḱwṓ), the wolf (*wĺ̥kʷos) and the bear (*h₂ŕ̥tḱos).
 Latin bōs comes from the same word too, but borrowed from a neighbouring Italic language.
+"""
+
+[[riddle]]
+id = 49
+location = "Cafe"
+language = "Spanish"
+category = "odd one out"
+difficulty = 2
+clue = "al-"
+text = """
+Karl's Spanish is rusty, but he knows that many Spanish words kept the Arabic article al-,
+'the'. Which of these does NOT come from Arabic?
+"""
+answer = "alma (soul)"
+wrong_answers = ["almohada (pillow)", "algodón (cotton)", "alcalde (mayor)"]
+decoys = ["aceite (oil)", "azúcar (sugar)"]
+hint = "One of them is plain Latin that just happens to begin with al-."
+explanation = """
+Alma comes from Latin anima, 'soul, breath'. Almohada (Arabic miḵadda, 'pillow'), algodón
+(quṭn, 'cotton') and alcalde (al-qāḍī, 'the judge') kept the article al-; in aceite
+(az-zayt, 'the oil') and azúcar (as-sukkar, 'the sugar') it blended into the next sound.
+"""
+
+[[riddle]]
+id = 50
+location = "Cafe"
+language = "Spanish"
+category = "borrowings"
+clue = "ojalá"
+text = "'Ojalá,' Karl sighs: 'if only.' The word is Arabic in disguise. What did it first say?"
+answer = "God willing"
+wrong_answers = ["Peace be with you", "God is great"]
+decoys = ["Praise be to God", "In the name of God"]
+hint = "It leaves the outcome in God's hands."
+explanation = """
+Ojalá comes from Andalusian Arabic law šāʾa llāh, 'if God wills it' (or perhaps wa šāʾa llāh,
+'and may God will it'), much like Arabic ʾin šāʾa llāh, 'inshallah'.
+"""
+
+[[riddle]]
+id = 51
+location = "Cafe"
+language = "Old Norse"
+category = "borrowings"
+difficulty = 2
+clue = "egges or eyren"
+text = """
+In 1490 the printer William Caxton told of a mercer who asked a Kentish woman for 'egges'.
+She answered that she spoke no French: to her they were eyren. Where did 'egg' come from?
+"""
+answer = "Old Norse"
+wrong_answers = ["French", "Latin"]
+decoys = ["Dutch", "Welsh"]
+hint = "Think of who settled the north of England."
+explanation = """
+Egg is Old Norse egg, which came into English in the north, where the Vikings had settled.
+Eyren was the southern plural of the native Old English word, ǣg. After 1500 the northern
+word won.
+"""
+item = "Printer's Proof"
+
+[[riddle]]
+id = 52
+location = "Cafe"
+kind = "match"
+language = "German"
+category = "compounds"
+clue = "Handschuh · Fingerhut · Nilpferd"
+text = """
+Karl's crossword is full of German words that say exactly what they are.
+Match each one to its English meaning.
+"""
+pairs = [
+    ["Handschuh", "glove"],
+    ["Fingerhut", "thimble"],
+    ["Nilpferd", "hippopotamus"],
+]
+hint = "Read them literally: hand shoe, finger hat, Nile horse."
+explanation = """
+German builds words out of what it already has: a Handschuh is a 'hand shoe', a Fingerhut a
+'finger hat', and a Nilpferd a 'Nile horse', a loose translation of hippopotamus, Greek for
+'river horse'.
+"""
+item = "Leather Glove"
+
+[[riddle]]
+id = 53
+location = "Cafe"
+language = "French"
+category = "etymology"
+clue = "chauffeur"
+text = """
+A black car waits outside the café, a chauffeur at the wheel.
+Before there were motor cars, what was a French chauffeur?
+"""
+answer = "A stoker"
+wrong_answers = ["A coachman", "A butler"]
+decoys = ["A locksmith", "A doorman"]
+hint = "Chauffer means 'to heat'."
+explanation = """
+French chauffeur, from chauffer 'to heat', was the man who stoked a steam engine. The first
+motor cars ran on steam, so the French called their drivers chauffeurs, and English took the
+word over in 1896.
+"""
+item = "Car Keys"
+
+[[riddle]]
+id = 54
+location = "Cafe"
+language = "Russian"
+category = "false friends"
+clue = "магазин (magazin)"
+text = """
+Two of Volkov's men at the bar: one sends the other to the магазин (magazin).
+He is not going to read. What is a магазин?
+"""
+answer = "A shop"
+wrong_answers = ["A newspaper", "A library"]
+decoys = ["A theatre", "A post office"]
+hint = "Think of French magasin."
+explanation = """
+Russian магазин is a shop. Like English magazine, it goes back through French magasin and
+Italian magazzino to Arabic makhāzin, 'storehouses'. English turned the storehouse into a
+periodical; Russian turned it into a shop.
+"""
+
+[[riddle]]
+id = 55
+location = "Cafe"
+language = "Sanskrit"
+category = "etymology"
+difficulty = 2
+clue = "jaṅgala"
+text = """
+Karl calls the potted palms in the corner his 'jungle'. The word comes from Sanskrit jaṅgala.
+What kind of land was that?
+"""
+answer = "Dry and sparsely wooded"
+wrong_answers = ["Dense rainforest", "Swamp"]
+decoys = ["Snowy mountains", "Riverbank"]
+hint = "The opposite of what the word means today."
+explanation = """
+Sanskrit jaṅgala meant 'arid, sparsely wooded'. Hindi jangal came to mean wasteland, forest
+or any uncultivated ground, and English, from 1776, used it for the tangled forests of India.
 """
 
 # =============================================================================
@@ -820,6 +1004,100 @@ explanation = """
 All four come from PIE *swésōr, 'sister'. Latin turned the s between vowels into r (soror),
 and Germanic slipped in a t (English sister, German Schwester); Slavic sestra has one too.
 The others are brother, mother, son, daughter and father.
+"""
+
+[[riddle]]
+id = 59
+location = "Church"
+language = "Persian"
+category = "borrowings"
+difficulty = 2
+clue = "παράδεισος (parádeisos)"
+text = """
+Greek parádeisos, the source of 'paradise', was borrowed from an Iranian word.
+What did that word mean?
+"""
+answer = "A walled park"
+wrong_answers = ["The sky", "Eternal life"]
+decoys = ["A holy mountain", "A golden city"]
+hint = "Persian kings kept them, full of trees and animals."
+explanation = """
+The Iranian word (compare Avestan pairi-daēza) meant 'walled enclosure', from pairi- 'around'
+(Greek peri-) and a root meaning 'to build a wall'. Xenophon used parádeisos for the parks of
+Persian kings, and the Greek Bible used it for the garden of Eden.
+"""
+item = "Pressed Flower"
+
+[[riddle]]
+id = 60
+location = "Church"
+language = "Hebrew"
+category = "etymology"
+difficulty = 2
+clue = "משיח · Χριστός"
+text = "Hebrew māšîaḥ (messiah) and Greek Christós mean the same thing. What?"
+answer = "Anointed"
+wrong_answers = ["Saviour", "King"]
+decoys = ["Shepherd", "Teacher"]
+hint = "Kings and priests had oil poured over their heads."
+explanation = """
+Hebrew māšîaḥ comes from māšaḥ, 'to anoint'. The Greek translators of the Septuagint rendered
+it Christós, from chríō, 'to anoint': Messiah and Christ are one title in two languages.
+"""
+item = "Anointing Oil"
+
+[[riddle]]
+id = 61
+location = "Church"
+language = "Greek"
+category = "etymology"
+clue = "ἔνθεος (éntheos)"
+text = "The sacristan sings with great enthusiasm. In Greek, an éntheos person had what inside them?"
+answer = "A god"
+wrong_answers = ["A fire", "A secret"]
+decoys = ["Strong wine", "A song"]
+hint = "Think of theology."
+explanation = """
+Greek éntheos, 'with a god inside' (en 'in' + theós 'god'), described people possessed by a
+god, and enthousiasmós was that divine frenzy. English first used enthusiasm for excessive
+religious zeal, before it could mean zeal for anything.
+"""
+
+[[riddle]]
+id = 62
+location = "Church"
+language = "Greek"
+category = "etymology"
+clue = "κοιμητήριον (koimētḗrion)"
+text = """
+Father Thomas leads you past the churchyard. Greek koimētḗrion, the source of 'cemetery',
+first meant what?
+"""
+answer = "A place to sleep"
+wrong_answers = ["A field of stones", "A house of the dead"]
+decoys = ["A holy garden", "A place of weeping"]
+hint = "Early Christians spoke of death as a sleep."
+explanation = """
+A koimētḗrion was a sleeping place, a dormitory, from koimân 'to put to sleep'. Early
+Christian writers used it for burial grounds, where the dead sleep until the resurrection.
+"""
+item = "Grave Rubbing"
+
+[[riddle]]
+id = 63
+location = "Church"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 2
+clue = "cornū   (k → h)"
+text = "Latin cornū grows on a bull's head. Grimm's law turned k into h. What is it in English?"
+answer = "horn"
+accepted = ["horns"]
+hint = "The archangel Gabriel blows one."
+explanation = """
+Latin cornū and English horn are cognates from PIE *ḱr̥h₂nóm: Germanic turned the k into h
+(Grimm's law). Unicorn and cornet come from the Latin word, by way of French.
 """
 
 # =============================================================================
@@ -1107,6 +1385,102 @@ their sounds took unexpected turns. The others are the bear, the dog, water, the
 cattle.
 """
 item = "Wolf's Head Ring"
+
+[[riddle]]
+id = 68
+location = "Archive"
+language = "Russian"
+category = "borrowings"
+difficulty = 2
+clue = "вокзал (vokzal)"
+text = """
+A ticket in Volkov's drawer: вокзал (vokzal), Russian for a railway station.
+The word is named after pleasure gardens in which city?
+"""
+answer = "London"
+wrong_answers = ["Paris", "Vienna"]
+decoys = ["Berlin", "Warsaw"]
+hint = "Say vokzal with an English accent."
+explanation = """
+Вокзал comes from Vauxhall, the pleasure gardens of London. The station building at Pavlovsk,
+near St Petersburg, was also a place of entertainment, known as the vokzal, and the word moved
+on to railway stations in general.
+"""
+item = "Train Ticket"
+
+[[riddle]]
+id = 69
+location = "Archive"
+kind = "type"
+language = "Old Norse"
+category = "borrowings"
+clue = "vindauga   (vindr + auga)"
+text = """
+Old Norse vindauga: vindr, 'wind', plus auga, 'eye'.
+Which English word did the Vikings leave behind?
+"""
+answer = "window"
+accepted = ["windows"]
+hint = "The one in Volkov's archive has bars on it."
+explanation = """
+Window is Old Norse vindauga, the 'wind eye'. It pushed out the Old English words ēagþyrel,
+'eye-hole', and ēagduru, 'eye-door'.
+"""
+
+[[riddle]]
+id = 70
+location = "Archive"
+language = "Old Norse"
+category = "borrowings"
+difficulty = 2
+clue = "rannsaka"
+text = "Someone has ransacked Volkov's files before you. The word is Old Norse rannsaka. What did it mean?"
+answer = "To search a house"
+wrong_answers = ["To burn a ship", "To steal cattle"]
+decoys = ["To break an oath", "To bury treasure"]
+hint = "Rann was a house."
+explanation = """
+Old Norse rannsaka is rann 'house' + saka 'to search' (akin to English seek): a house search.
+In English the searching turned into plundering.
+"""
+
+[[riddle]]
+id = 71
+location = "Archive"
+language = "French"
+category = "etymology"
+clue = "sabot"
+text = "A saboteur has been at Volkov's files. The word is built on French sabot. What is a sabot?"
+answer = "A wooden shoe"
+wrong_answers = ["A spanner", "A fuse"]
+decoys = ["A rifle butt", "A lock pick"]
+hint = "Dutch farmers wore them too."
+explanation = """
+A sabot is a wooden shoe, and saboter meant to clatter about in them, and so to botch a job.
+The famous story of strikers throwing their clogs into the machines is not borne out by the
+word's history: sabotage began as bungled work.
+"""
+item = "Wooden Shoe"
+
+[[riddle]]
+id = 72
+location = "Archive"
+language = "French"
+category = "etymology"
+clue = "cuevrefeu"
+text = """
+"We move after curfew," reads a note in Volkov's hand. The word is Old French cuevrefeu.
+What does it say, word for word?
+"""
+answer = "Cover the fire"
+wrong_answers = ["Close the gates", "Ring the bells"]
+decoys = ["Light the lamps", "Feed the horses"]
+hint = "Feu is fire."
+explanation = """
+Old French cuevrefeu is 'cover fire': an evening bell told people to cover or put out their
+hearths, so that nothing would catch fire in the night.
+"""
+item = "Night Pass"
 
 # =============================================================================
 # VOLKOV'S SHOWDOWN

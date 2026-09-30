@@ -50,6 +50,16 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(placed, sorted(r.id for r in RIDDLES))
 
 
+    def test_pool_is_big_enough(self):
+        self.assertGreaterEqual(len(RIDDLES), 60)
+        for loc in LOCATIONS.values():
+            if loc.riddle_ids:
+                # enough spare riddles that two cases differ
+                self.assertGreaterEqual(len(loc.riddle_ids), loc.riddles_per_case + 5, loc.id)
+        for kind in ("choice", "type", "match", "order"):
+            self.assertTrue(any(r.kind == kind for r in RIDDLES), kind)
+        self.assertTrue(any(r.category == "reconstruction" for r in RIDDLES))
+
     def test_riddles_are_well_formed(self):
         ids = [r.id for r in RIDDLES + VOLKOV_RIDDLES]
         self.assertEqual(len(ids), len(set(ids)))
