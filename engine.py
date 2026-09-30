@@ -10,11 +10,17 @@ come back later, but evidence you skip counts against you at the end.
 
 Evidence is also currency: show it to characters to learn more, trade it for a
 hint, or throw it at Volkov in the final showdown to dodge a question.
+
+Characters can be questioned too (data/interrogations.toml). Some of their answers
+are lies, and the right evidence breaks them; how that goes decides how far they
+trust you.
 """
 
 import json
 import random
 import re
+import sys
+import tomllib
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Tuple
@@ -433,6 +439,10 @@ class GameState:
     visited_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     unlocked_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     presented: List[str] = field(default_factory=list)  # "location:item" pairs that revealed something
+    trust: Dict[str, int] = field(default_factory=dict)   # character -> trust (0 if missing)
+    asked: List[str] = field(default_factory=list)        # "character:question" put to them so far
+    lies_broken: List[str] = field(default_factory=list)  # "character:question" lies you broke with evidence
+    favors_used: List[str] = field(default_factory=list)  # characters whose free hint you already took
 
 
 @dataclass
@@ -444,6 +454,149 @@ class AnswerResult:
     beat: Optional[str] = None      # story beat revealed by this answer
     streak_bonus: int = 0
     heart_restored: bool = False
+
+
+# =============================================================================
+# INTERROGATIONS (the content lives in data/interrogations.toml)
+# =============================================================================
+
+INTERROGATIONS_FILE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "data" / "interrogations.toml"
+
+# Trust starts at 0. Breaking a lie wins TRUST_FOR_A_LIE; wrong evidence loses 1 (and a
+# heart, but never the last one). Below 0 a character won't answer questions until you
+# solve another riddle at their location (or anywhere, once their location is done).
+# At TRUSTING or above they owe you one free hint per case, to use anywhere, and a
+# character with a blessing restores a heart before the showdown.
+TRUST_FOR_A_LIE = 2
+TRUSTING = 2
+
+
+class InterrogationDataError(ValueError):
+    """interrogations.toml is broken. The message says where: file, character, field."""
+
+
+@dataclass
+class Question:
+    id: str
+    ask: str                 # what the detective asks
+    answer: str              # what the character says; a lie if `lie` is set
+    after: int = 0           # riddles solved at their location before the question comes up
+    lie: bool = False
+    evidence: List[str] = field(default_factory=list)  # any one of these breaks the lie
+    truth: str = ""          # what they admit when the lie breaks; it goes into the case notes
+
+
+@dataclass
+class Interrogation:
+    character: str
+    location: str
+    opening: str             # said when the questioning starts
+    refuse: str              # said while they don't trust you
+    wrong: List[str]         # said when you press with the wrong evidence
+    favor: str               # said when you call in the free hint they owe you
+    questions: List[Question]
+    blessing: str = ""       # if they trust you: said when they restore a heart before the showdown
+
+
+@dataclass
+class PressResult:
+    broken: bool             # the lie fell apart
+    line: str                # what the character says
+    trust_change: int = 0
+    heart_lost: bool = False
+    clammed_up: bool = False  # they won't answer questions until you solve another riddle
+
+
+def load_interrogations(path: Path = INTERROGATIONS_FILE) -> Dict[str, Interrogation]:
+    """Read and check interrogations.toml. Returns character name -> Interrogation."""
+    def fail(where: str, problem: str):
+        raise InterrogationDataError(f"{path.name}: {where}: {problem}")
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except OSError as e:
+        raise InterrogationDataError(f"{path}: can't read it ({e.strerror})") from None
+    except tomllib.TOMLDecodeError as e:
+        raise InterrogationDataError(f"{path.name}: not valid TOML: {e}") from None
+
+    homes = {loc.character: loc.id for loc in LOCATIONS.values()}
+    items = {r.item for r in RIDDLES if r.item}
+
+    def check_fields(table: dict, required: set, optional: set, where: str):
+        for key in table:
+            if key not in required | optional:
+                fail(where, f"unknown field '{key}' (fields: {', '.join(sorted(required | optional))})")
+        for key in sorted(required):
+            if key not in table:
+                fail(where, f"field '{key}' is missing")
+
+    def text(table: dict, key: str, where: str) -> str:
+        value = table.get(key, "")
+        if not isinstance(value, str) or not value.strip():
+            fail(where, f"field '{key}' should be some text in quotes")
+        return value
+
+    def texts(table: dict, key: str, where: str) -> List[str]:
+        value = table.get(key)
+        if not isinstance(value, list) or not value or not all(isinstance(v, str) and v.strip() for v in value):
+            fail(where, f"field '{key}' should be a list of texts, like [\"...\", \"...\"]")
+        return value
+
+    for key in data:
+        if key != "character":
+            fail(key, "unknown section; every block should start with [[character]] or [[character.question]]")
+    if not isinstance(data.get("character"), list):
+        fail("character", "no [[character]] blocks found")
+
+    result: Dict[str, Interrogation] = {}
+    for n, table in enumerate(data["character"], 1):
+        if not isinstance(table, dict):
+            fail(f"character #{n}", "should be a [[character]] block")
+        name = table.get("name")
+        where = f"character '{name}'" if isinstance(name, str) else f"character #{n}"
+        check_fields(table, {"name", "opening", "refuse", "wrong", "favor", "question"}, {"blessing"}, where)
+        if name not in homes:
+            fail(where, f"field 'name' should be one of: {', '.join(homes)}")
+        if name in result:
+            fail(where, "this character is listed twice")
+        if not isinstance(table["question"], list) or not all(isinstance(q, dict) for q in table["question"]):
+            fail(where, "questions should be [[character.question]] blocks")
+
+        questions: List[Question] = []
+        for m, q in enumerate(table["question"], 1):
+            qid = q.get("id")
+            qwhere = f"{name}, question '{qid}'" if isinstance(qid, str) else f"{name}, question #{m}"
+            lie = q.get("lie", False)
+            if not isinstance(lie, bool):
+                fail(qwhere, "field 'lie' should be true or false")
+            if not lie and ("evidence" in q or "truth" in q):
+                fail(qwhere, "fields 'evidence' and 'truth' only go with lie = true")
+            check_fields(q, {"id", "ask", "answer"} | ({"evidence", "truth"} if lie else set()),
+                         {"after", "lie"}, qwhere)
+            text(q, "id", qwhere)
+            if any(other.id == qid for other in questions):
+                fail(qwhere, f"field 'id' is used twice for {name}")
+            after = q.get("after", 0)
+            if not isinstance(after, int) or isinstance(after, bool) or after < 0:
+                fail(qwhere, "field 'after' should be a whole number, 0 or more")
+            evidence = texts(q, "evidence", qwhere) if lie else []
+            for item in evidence:
+                if item not in items:
+                    fail(qwhere, f"field 'evidence': no riddle gives evidence called '{item}'")
+            questions.append(Question(qid, text(q, "ask", qwhere), text(q, "answer", qwhere), after, lie,
+                                      evidence, text(q, "truth", qwhere) if lie else ""))
+        if not questions:
+            fail(where, "needs at least one [[character.question]]")
+
+        result[name] = Interrogation(
+            name, homes[name], text(table, "opening", where), text(table, "refuse", where),
+            texts(table, "wrong", where), text(table, "favor", where), questions,
+            text(table, "blessing", where) if "blessing" in table else "")
+    return result
+
+
+INTERROGATIONS = load_interrogations()
 
 
 # =============================================================================
@@ -459,6 +612,7 @@ class GameEngine:
         self.state = GameState()
         self.riddles = {r.id: r for r in RIDDLES}
         self.locations = LOCATIONS
+        self.interrogations = INTERROGATIONS
         if save_dir is not None:
             self.SAVE_DIR = Path(save_dir)  # e.g. a private folder per web session
         self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -554,6 +708,7 @@ class GameEngine:
             for item, text in loc.present.items():
                 if f"{loc.id}:{item}" in self.state.presented:
                     notes.append((loc.name, f'{loc.character}, shown the {item}: "{text}"'))
+            notes.extend((loc.name, f'{loc.character}, caught in a lie: "{q.truth}"') for q in self.caught_lies(loc.id))
         return notes
 
     def unlocked_locations(self) -> List[Location]:
@@ -643,6 +798,7 @@ class GameEngine:
             self.state.unlocked_locations.append(loc.leads_to)
             result.unlocked = loc.leads_to
 
+        self.mend_trust(loc.id)
         self.autosave()
         return result
 
@@ -675,6 +831,126 @@ class GameEngine:
             self.state.visited_locations.append(loc_id)
         self.autosave()
         return True
+
+    # --- Interrogations ----------------------------------------------------------
+
+    def interrogation(self, loc_id: Optional[str] = None) -> Optional[Interrogation]:
+        """Who can be questioned at a location, if anyone"""
+        return self.interrogations.get(self.location(loc_id).character)
+
+    def trust(self, character: str) -> int:
+        return self.state.trust.get(character, 0)
+
+    def trust_label(self, character: str) -> str:
+        """'distrustful' (won't answer), 'guarded', or 'trusting' (owes you a free hint)"""
+        trust = self.trust(character)
+        return "distrustful" if trust < 0 else "trusting" if trust >= TRUSTING else "guarded"
+
+    def refuses(self, loc_id: Optional[str] = None) -> bool:
+        talk = self.interrogation(loc_id)
+        return talk is not None and self.trust(talk.character) < 0
+
+    def mend_advice(self, loc_id: Optional[str] = None) -> str:
+        """How to win back the distrustful character at a location (see mend_trust)"""
+        loc = self.location(loc_id)
+        solved, total = self.progress(loc.id)
+        return f"Solve another riddle {'here' if solved < total else 'anywhere'} to win back {loc.character}'s trust."
+
+    def questions(self, loc_id: Optional[str] = None) -> List[Question]:
+        """The questions open to you at a location; more come up as you solve riddles there"""
+        loc_id = loc_id or self.state.current_location
+        talk = self.interrogation(loc_id)
+        if talk is None:
+            return []
+        solved, _ = self.progress(loc_id)
+        return [q for q in talk.questions if solved >= q.after]
+
+    def locked_questions(self, loc_id: Optional[str] = None) -> int:
+        talk = self.interrogation(loc_id)
+        return len(talk.questions) - len(self.questions(loc_id)) if talk else 0
+
+    def was_asked(self, question: Question) -> bool:
+        return f"{self.interrogation().character}:{question.id}" in self.state.asked
+
+    def is_caught(self, question: Question) -> bool:
+        return f"{self.interrogation().character}:{question.id}" in self.state.lies_broken
+
+    def caught_lies(self, loc_id: str) -> List[Question]:
+        talk = self.interrogation(loc_id)
+        if talk is None:
+            return []
+        return [q for q in talk.questions if f"{talk.character}:{q.id}" in self.state.lies_broken]
+
+    def ask(self, question_id: str) -> str:
+        """Put a question to the character here. Returns their answer (the truth, once a lie is broken)."""
+        talk = self.interrogation()
+        if self.refuses():
+            return talk.refuse
+        question = next(q for q in self.questions() if q.id == question_id)
+        key = f"{talk.character}:{question.id}"
+        if key not in self.state.asked:
+            self.state.asked.append(key)
+            self.autosave()
+        return question.truth if key in self.state.lies_broken else question.answer
+
+    def press(self, question_id: str, item: str) -> PressResult:
+        """Contradict an answer with a piece of evidence (you keep it). The right piece breaks a lie
+        and wins trust; anything else costs trust and a heart, though never your last one."""
+        talk = self.interrogation()
+        question = next(q for q in self.questions() if q.id == question_id)
+        key = f"{talk.character}:{question.id}"
+        if self.refuses():
+            return PressResult(False, talk.refuse, clammed_up=True)
+        if key in self.state.lies_broken or item not in self.state.inventory:
+            return PressResult(False, self.ask(question_id))  # nothing to break, or nothing to break it with
+
+        if question.lie and item in question.evidence:
+            self.state.lies_broken.append(key)
+            self.state.trust[talk.character] = self.trust(talk.character) + TRUST_FOR_A_LIE
+            self.autosave()
+            return PressResult(True, question.truth, trust_change=TRUST_FOR_A_LIE)
+
+        self.state.trust[talk.character] = self.trust(talk.character) - 1
+        result = PressResult(False, random.choice(talk.wrong), trust_change=-1, clammed_up=self.refuses())
+        if self.state.sanity > 1:
+            self.state.sanity -= 1
+            result.heart_lost = True
+        self.autosave()
+        return result
+
+    def mend_trust(self, loc_id: str):
+        """A solved riddle wins back a distrustful character at that location,
+        or anywhere once their own location has nothing left to solve"""
+        for character, talk in self.interrogations.items():
+            if self.trust(character) < 0:
+                solved, total = self.progress(talk.location)
+                if talk.location == loc_id or solved >= total:
+                    self.state.trust[character] += 1
+
+    def favors(self) -> List[str]:
+        """Characters who trust you and still owe you a free hint this case"""
+        return [character for character in self.interrogations
+                if self.trust(character) >= TRUSTING and character not in self.state.favors_used]
+
+    def call_in_favor(self, character: str) -> Optional[str]:
+        """Take a free hint from someone who trusts you. Returns what they say, or None if they owe you nothing."""
+        if character not in self.favors():
+            return None
+        self.state.favors_used.append(character)
+        self.autosave()
+        return self.interrogations[character].favor
+
+    def receive_blessing(self) -> Optional[Tuple[str, str]]:
+        """Before the showdown, a character with a blessing who trusts you restores a heart.
+        Returns (character, what they say), or None."""
+        if self.state.sanity >= self.state.max_sanity:
+            return None
+        for character, talk in self.interrogations.items():
+            if talk.blessing and self.trust(character) >= TRUSTING:
+                self.state.sanity += 1
+                self.autosave()
+                return character, talk.blessing
+        return None
 
     # --- Etymology notebook (kept across cases) --------------------------------
 

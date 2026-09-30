@@ -1,0 +1,222 @@
+# Interrogations: what the detective can ask each character, and the lies they tell.
+#
+# Press i (full-screen version) or type i (console version) to question whoever is at
+# your location. Pick a question to hear the answer. Some answers are lies: press one
+# with the right piece of evidence and it breaks. The character admits the truth (it
+# goes into the case notes) and starts to trust you. Pressing with the wrong evidence
+# costs trust and a heart. The rules live in engine.py (GameEngine.press).
+#
+# Each [[character]] block is one person. The [[character.question]] blocks under it
+# are their questions, in the order they are listed in the game.
+#
+# [[character]]
+#   name      the character, spelled exactly as in the game: Klaus Weber, Herr Schmidt,
+#             Karl, Father Thomas or Igor Volkov. They are questioned at their location.
+#   opening   what they say when the questioning starts
+#   refuse    what they say while they don't trust you (after wrong evidence)
+#   wrong     a list of lines; one of them is said when you press with the wrong evidence
+#   favor     what they say when you call in the free hint they owe you once they trust you
+#   blessing  (optional) once they trust you, they say this and restore a heart before
+#             the showdown with Volkov
+#
+# [[character.question]]
+#   id        a short name, unique for this character. Save files use it, so don't
+#             rename it once people are playing.
+#   ask       what the detective asks
+#   answer    what the character says
+#   after     (optional) riddles to solve at their location before the question comes
+#             up; 0 if left out
+#   lie       (optional) true if the answer is a lie that evidence can break
+#   evidence  (lies only) the evidence that breaks it; any one of the names works
+#   truth     (lies only) what they admit when the lie breaks
+#
+# Evidence names must match the evidence the riddles give (the `item` of each riddle).
+# Only use evidence the player can hold by the time they meet the character: evidence
+# from riddles at the character's own location or at places earlier in the story.
+# Write text in "double quotes"; single quotes inside are fine, double quotes need \".
+
+
+[[character]]
+name = "Klaus Weber"
+opening = "Ask me anything, detective. If it brings her home, I'll answer."
+refuse = "I hired you to find my sister, not to cross-examine me. Go and do some detective work."
+wrong = [
+    "What is that supposed to prove? I'm her brother, not a suspect.",
+    "You think I would lie about my own sister?",
+]
+favor = "Elena used to quiz me on these over supper. I never got one right, but I remember what she said."
+
+[[character.question]]
+id = "sister"
+ask = "Tell me about Elena."
+answer = "She's the clever one. Eleven languages, and she says please in every one of them. Since the war she hardly sleeps. She says the old words are the only thing in Berlin the bombs didn't break."
+
+[[character.question]]
+id = "last-seen"
+ask = "When did you last see her?"
+answer = "The morning she vanished, at breakfast. She said she'd be working at home all day. When I got back that night the lamp was still on and she was gone."
+lie = true
+evidence = ["Case File"]
+truth = "...All right. She didn't stay home. I walked her to the Staatsbibliothek that morning. Two men in dark suits were waiting on the steps, and she told me to go home. So I went home. God help me, I was afraid of them."
+
+[[character.question]]
+id = "police"
+ask = "Why a detective? Why not the police?"
+answer = "Because she told me to. She said the police in this city answer to whichever army paid them last. A detective, she said, only answers to the truth. And to his fee."
+
+[[character.question]]
+id = "babel"
+ask = "Did she ever mention the Babel Society?"
+after = 1
+answer = "Once. She laughed and called it a club for old men who think words are weapons. A week later she stopped laughing, and she never said the name again."
+
+
+[[character]]
+name = "Herr Schmidt"
+opening = "Ask quickly, detective. The reading room closes at six, war or no war."
+refuse = "The reference desk is closed to you, detective. Read something first. Then we will talk."
+wrong = [
+    "That is not evidence, detective. That is clutter.",
+    "Tsk. You would fail my seminar on sources.",
+]
+favor = "Very well. One footnote, free of charge. Don't tell the other readers."
+
+[[character.question]]
+id = "work"
+ask = "What was Elena working on?"
+answer = "Proto-Indo-European. The mother of our mothers' tongues, she called it. She wanted the oldest word of all. I told her the oldest words are only guesses with an asterisk in front."
+
+[[character.question]]
+id = "readers"
+ask = "Who else reads here these days?"
+answer = "Widows looking for their husbands' names, and officers from four armies looking for maps. Since the surrender, everyone wants to know what lies under Berlin."
+
+[[character.question]]
+id = "elsewhere"
+ask = "Where else did Elena work?"
+after = 2
+answer = "Nowhere. At that desk by the window, from opening to closing. She despised cafés. All smoke and gossip, she said. A scholar works in silence."
+lie = true
+evidence = ["Sugar Packet"]
+truth = "...Café Mozart. Yes. In the evenings she went there to watch the men in dark suits at table six. She wrote down when they came and when they left, like a clerk. She made me swear to tell no one."
+
+[[character.question]]
+id = "plans"
+ask = "Why tell those men the plans were lost?"
+after = 5
+answer = "Because they asked for them the way a man asks for a knife. And because Elena never brought them back. I stamped her slip 'returned' myself, so nobody would come looking for her through me."
+
+
+[[character]]
+name = "Karl"
+opening = "Questions cost the same as coffee, detective. Order something and keep your voice down."
+refuse = "I pour coffee, detective. Answers are off the menu until you've earned them."
+wrong = [
+    "You're waving that around in here? The suits are watching.",
+    "That's not what you think it is, detective.",
+]
+favor = "On the house. The lady at table nine taught me this one."
+
+[[character.question]]
+id = "suits"
+ask = "Who are the men in dark suits?"
+answer = "Customers. They pay in American cigarettes and speak German like they're reading it off a card. A waiter who asks more than that ends up in the Spree."
+
+[[character.question]]
+id = "elena"
+ask = "Did Elena Weber ever come in here?"
+answer = "Never heard the name. Half of Berlin is looking for somebody, detective. I just pour the coffee."
+lie = true
+evidence = ["Photograph", "Waiter's Notepad"]
+truth = "...All right. Her. Every evening, one coffee for three hours at table nine, watching table six. The suits noticed her before I did. One night she paid and left, and two of them got up and followed her."
+
+[[character.question]]
+id = "table-six"
+ask = "What do they talk about at table six?"
+after = 2
+answer = "Words. Old ones. One of them corrects the others' grammar, and they let him. I've never seen men in suits let anybody do that."
+
+[[character.question]]
+id = "soup"
+ask = "Who pays for the soup?"
+after = 4
+answer = "A tall one with a Russian accent. Counts his change twice and never smiles. The others call him Herr Professor."
+
+
+[[character]]
+name = "Father Thomas"
+opening = "Ask, my son. This is still a house of confession, even without its roof."
+refuse = "Not now, my son. Stay a while, study the old words with me, and perhaps I will find the courage to speak again."
+wrong = [
+    "You wave that at a priest? Shame on you, my son.",
+    "That proves nothing but your impatience.",
+]
+favor = "Let an old priest help. The Latin, at least, I still know by heart."
+blessing = "Kneel a moment, my son. Whatever waits in that archive, you will not face it alone."
+
+[[character.question]]
+id = "society"
+ask = "What is the Babel Society?"
+answer = "Scholars, once. They met in my vestry to argue about the tongues of Pentecost. Now they come in pairs, in dark suits, and they no longer argue."
+
+[[character.question]]
+id = "elena"
+ask = "Did you know Elena Weber?"
+answer = "Before the war she came every Sunday, and never for the sermon. She said the stones under this church are older than the prayers we say over them."
+
+[[character.question]]
+id = "crypt"
+ask = "What's down in the crypt?"
+after = 2
+answer = "Bones, my son. Bishops and burghers, seven hundred years of them. Nothing living. Nothing that needs a detective."
+lie = true
+evidence = ["Sugar Packet", "Portuguese Bread"]
+truth = "...The dead do not eat, do they? No. Someone is down there. The men in dark suits carry food beneath the altar when the bells ring, and I pray loudly so I cannot hear them. God forgive me, I have become very good at not hearing."
+
+[[character.question]]
+id = "sacristan"
+ask = "Who is your sacristan?"
+after = 4
+answer = "A good man. His grandmother came from the Arvanitika villages outside Athens, and he still counts the candles in her language. He hears things, my son. He always has."
+
+
+[[character]]
+name = "Igor Volkov"
+opening = "An interview? How civilised. Ask, detective. I may even answer."
+refuse = "No. You have wasted enough of my evening. Impress me first."
+wrong = [
+    "Is that the best you have? Elena would be embarrassed for you.",
+    "Evidence is only as good as the mind that reads it, detective.",
+]
+favor = "Professional courtesy. I would rather beat you at your best."
+
+[[character.question]]
+id = "society"
+ask = "What is the Babel Society?"
+answer = "Philologists. Men who understand that every word is a fossil, and that whoever writes the dictionary writes the history. Armies come and go, detective. Dictionaries stay."
+
+[[character.question]]
+id = "why-elena"
+ask = "Why Elena?"
+answer = "Because she is the best. She hears Proto-Indo-European the way you hear a dog bark. I needed the best, and the best needed persuading."
+
+[[character.question]]
+id = "church"
+ask = "Have you ever set foot in St. Nicholas?"
+after = 2
+answer = "A church? I am a man of science. The last time I stood in a church, there was still a Tsar to pray for."
+lie = true
+evidence = ["Parish Ledger", "History Book"]
+truth = "...Thomas and his register. He keeps better books than he keeps secrets. Yes, we met in his vestry, before the war and after it. A church is only a building, detective. What interests me is underneath."
+
+[[character.question]]
+id = "writing"
+ask = "What is Elena writing for you?"
+after = 4
+answer = "A dictionary of the first language. Every root, back to the beginning. When it is finished, I decide which nations are cousins and which are strangers. Babel, detective, rebuilt with footnotes."
+
+[[character.question]]
+id = "run"
+ask = "Why haven't you run?"
+after = 6
+answer = "From you? I have outlasted a Tsar, two revolutions and a Reich. One detective with a pocketful of riddles does not frighten me."
