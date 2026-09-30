@@ -1297,8 +1297,8 @@ sequence = ["Arabic makhāzin", "Italian magazzino", "French magasin", "English 
 hint = "It crossed the Mediterranean with the merchants, then the Channel."
 explanation = """
 Arabic makhāzin, plural of makhzan 'storehouse', became Italian magazzino and French magasin,
-'warehouse, shop'. English magazine meant a storehouse, often for ammunition, until the
-Gentleman's Magazine of 1731 made it a storehouse of reading.
+'warehouse, shop'. English magazine first meant a storehouse, often for ammunition; the
+Gentleman's Magazine of 1731 made it a storehouse of reading as well.
 """
 item = "Warehouse Receipt"
 
@@ -1372,8 +1372,8 @@ category = "reconstruction"
 difficulty = 3
 clue = "волк · vṛ́ka · vilkas · wolf"
 text = """
-Volkov means 'of the wolf', from Russian волк (volk). With Sanskrit vṛ́ka, Lithuanian vilkas
-and English wolf, which Proto-Indo-European word does his name go back to?
+The name Volkov comes from Russian волк (volk), 'wolf'. With Sanskrit vṛ́ka, Lithuanian
+vilkas and English wolf, which Proto-Indo-European word does his name go back to?
 """
 answer = "*wĺ̥kʷos"
 wrong_answers = ["*h₂ŕ̥tḱos", "*ḱwṓ", "*wódr̥"]
