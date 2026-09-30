@@ -467,11 +467,11 @@ class Difficulty:
 # Every rule that changes with the difficulty, easiest first
 DIFFICULTIES: Dict[str, Difficulty] = {
     "rookie": Difficulty("Rookie", hearts=5, hints="free", streak_heart=3, showdown_rounds=3,
-                         blurb="5 hearts, hints are always free"),
+                         blurb="5 hearts, and hints are always free"),
     "detective": Difficulty("Detective", hearts=3, hints="earned", streak_heart=3, showdown_rounds=3,
-                            blurb="3 hearts, the case as it was meant to be played"),
+                            blurb="3 hearts; hints after a slip, or for evidence"),
     "noir": Difficulty("Noir", hearts=2, hints="none", streak_heart=0, showdown_rounds=4,
-                       blurb="2 hearts, no hints, no second wind; Volkov asks four"),
+                       blurb="2 hearts, no hints, no second wind; Volkov asks 4"),
 }
 DEFAULT_DIFFICULTY = "detective"
 

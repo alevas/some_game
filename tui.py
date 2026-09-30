@@ -6,7 +6,7 @@ Full-screen ASCII art version (needs Textual: pip install -r requirements.txt)
 Run with: python tui.py
 """
 
-import os
+import io
 import random
 import signal
 import sys
@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -23,8 +24,12 @@ from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 import art
+import savecode
+from achievements import Achievement, Achievements
 from engine import (GameEngine, AnswerResult, Riddle, Showdown, STORY_ORDER, LOCATIONS, ALL_RIDDLES,
-                    ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO)
+                    ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO,
+                    DIFFICULTIES, DEFAULT_DIFFICULTY, SaveCodeError)
+from settings import Settings, TOGGLES
 
 
 AMBER = "#e0b050"
@@ -51,17 +56,37 @@ class RainScene(Static):
 
     def __init__(self, scene: str, density: float = 0.12, **kwargs):
         super().__init__(**kwargs)
+        self.scene = scene
         # The static art has painted-on rain; the animation replaces it
         self.base = [list(line) for line in scene.replace("'", " ").replace(",", " ").split("\n")]
         self.width = max(len(line) for line in self.base)
         self.density = density
         self.drops: List[List[int]] = []  # [row, col]
+        self.timer = None
 
     def on_mount(self):
-        self.render_frame()
-        # Render's free instance has a tenth of a CPU; the animation alone would use it all
-        if not os.environ.get("RENDER"):
-            self.set_interval(0.09, self.tick)
+        self.timer = self.set_interval(0.09, self.tick, pause=True)
+        self.apply_motion()
+
+    def apply_motion(self):
+        """Start or stop the rain to match the Reduce motion setting. It starts out on for slow
+        hosts like Render's free instance, where the animation alone would use all the CPU."""
+        if self.app.settings.reduce_motion:
+            self.timer.pause()
+            self.drops = []
+            self.render_still()
+        else:
+            self.render_frame()
+            self.timer.resume()
+
+    def render_still(self):
+        """The art with its painted-on rain, for when nothing should move"""
+        text = Text()
+        for line in self.scene.split("\n"):
+            for ch in line.ljust(self.width):
+                text.append(ch, style=RAIN if ch in "'," else SMOKE)
+            text.append("\n")
+        self.update(text)
 
     def tick(self):
         for drop in self.drops:
@@ -88,7 +113,8 @@ class RainScene(Static):
 
 
 class Typewriter(Static):
-    """Reveals new text a few characters at a time; repeated text appears instantly"""
+    """Reveals new text a few characters at a time; repeated text appears instantly,
+    and so does everything when Reduce motion is on"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -104,6 +130,11 @@ class Typewriter(Static):
         self.full, self.shown = text, 0
         if self.timer:
             self.timer.stop()
+            self.timer = None
+        if self.app.settings.reduce_motion:
+            self.shown = len(text)
+            self.update(text)
+            return
         self.timer = self.set_interval(0.015, self.tick)
 
     def tick(self):
@@ -124,6 +155,13 @@ class AnswerInput(Input):
         self.screen.refresh_bindings()
 
 
+class CodeInput(Input):
+    """Save code box. A pasted code keeps all its lines; a plain Input keeps only the first."""
+
+    def _on_paste(self, event: events.Paste):
+        event.text = " ".join(event.text.split())  # Input's own handler runs next and pastes this
+
+
 # =============================================================================
 # MODALS
 # =============================================================================
@@ -133,11 +171,13 @@ class ChoiceModal(ModalScreen[Optional[str]]):
 
     BINDINGS = [Binding("escape", "cancel", "Back")]
 
-    def __init__(self, title: str, choices: List[Tuple[str, str, bool]], above: Optional[Text] = None):
+    def __init__(self, title: str, choices: List[Tuple[str, str, bool]], above: Optional[Text] = None,
+                 selected: Optional[str] = None):
         super().__init__()
         self.title_text = title
         self.choices = choices  # (id, label, enabled)
         self.above = above      # optional art shown over the options
+        self.selected = selected  # option highlighted at first, if not the first one
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog wide" if self.above else "dialog"):
@@ -146,6 +186,11 @@ class ChoiceModal(ModalScreen[Optional[str]]):
                 yield Static(self.above)
             yield OptionList(*[Option(label, id=cid, disabled=not enabled)
                                for cid, label, enabled in self.choices])
+
+    def on_mount(self):
+        if self.selected:
+            options = self.query_one(OptionList)
+            options.highlighted = options.get_option_index(self.selected)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
         self.dismiss(event.option.id)
@@ -193,6 +238,7 @@ class EndScreen(ModalScreen[None]):
         body.append(f"{self.text}\n\n", style=PAPER)
         body.append(f"Riddles solved   {len(s.solved_riddles)}/{len(self.engine.riddles)}\n", style=SMOKE)
         body.append(f"Evidence kept    {len(s.inventory)}/{self.engine.total_items()}\n", style=SMOKE)
+        body.append(f"Difficulty       {self.engine.difficulty().name}\n", style=SMOKE)
         body.append(f"Final score      {s.score}\n\n", style=SMOKE)
         body.append("All our words are connected." if self.triumph else "The Babel Society wins. For now.",
                     style=f"italic {PAPER}")
@@ -202,6 +248,112 @@ class EndScreen(ModalScreen[None]):
 
     def action_done(self):
         self.dismiss(None)
+
+
+class SettingsModal(ModalScreen[None]):
+    """The toggles from settings.py, saved as soon as they change"""
+
+    BINDINGS = [Binding("escape", "close", "Back")]
+
+    def compose(self) -> ComposeResult:
+        about = Text()
+        for key, label, what in TOGGLES:
+            about.append(f"\n{label}: ", style=f"bold {PAPER}")
+            about.append(what, style=SMOKE)
+        about.append("\n\nEnter to switch, Esc to go back", style=SMOKE)
+        with Vertical(classes="dialog wide"):
+            yield Static(heading("Settings"), classes="dialog-title")
+            yield OptionList(*[Option(self.label(key), id=key) for key, _, _ in TOGGLES])
+            yield Static(about)
+
+    def label(self, key: str) -> str:
+        name = next(label for k, label, _ in TOGGLES if k == key)
+        return f"{name:<24}{'ON' if getattr(self.app.settings, key) else 'OFF'}"
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        key, settings = event.option.id, self.app.settings
+        setattr(settings, key, not getattr(settings, key))
+        settings.save(self.app.engine.SAVE_DIR)
+        event.option_list.replace_option_prompt(key, self.label(key))
+
+    def action_close(self):
+        self.dismiss(None)
+
+
+class SaveCodeModal(ModalScreen[None]):
+    """The case as a save code, to copy, download or write down"""
+
+    BINDINGS = [
+        Binding("c", "copy", "Copy"),
+        Binding("d", "download", "Download"),
+        Binding("escape,enter", "close", "Close"),
+    ]
+
+    def __init__(self, code: str):
+        super().__init__()
+        self.code = code
+
+    def compose(self) -> ComposeResult:
+        body = Text()
+        body.append("Enter it on the title screen (Enter a save code) to pick this case up again, "
+                    "in any browser or terminal.\n\n", style=PAPER)
+        for line in savecode.lines(self.code):
+            body.append(f"{line}\n", style=f"bold {AMBER}")
+        keys = Text("\n")
+        for key, what in [("c", "copy"), ("d", "download as a file"), ("Esc", "close")]:
+            keys.append(key, style=f"bold {AMBER}")
+            keys.append(f" {what}    ", style=SMOKE)
+        keys.append("\nOr select the code with the mouse and press Ctrl+C.", style=SMOKE)
+        with Vertical(classes="dialog code"):
+            yield Static(heading("Save code"), classes="dialog-title")
+            yield Static(body)
+            yield Static(keys)
+
+    def action_copy(self):
+        # OSC 52: most terminals, and the browser version (xterm.js in textual-serve), put it on the clipboard
+        self.app.copy_to_clipboard(self.code)
+        self.notify("Save code copied. Paste it somewhere safe.")
+
+    def action_download(self):
+        text = (f"Noir Language Riddles: The Babel Conspiracy\n"
+                f"Save code, {self.app.engine.difficulty().name} case at {self.app.engine.location().name}:\n\n"
+                f"{self.code}\n\n"
+                f"To continue, choose Enter a save code on the title screen and paste it.\n")
+        self.app.deliver_text(io.StringIO(text), save_filename="noir-save-code.txt")
+        if self.app.is_web:
+            self.notify("Your browser is downloading noir-save-code.txt.")
+
+    def action_close(self):
+        self.dismiss(None)
+
+
+class CodeEntryModal(ModalScreen[bool]):
+    """Type or paste a save code. Dismisses with True once the case is restored."""
+
+    BINDINGS = [Binding("escape", "cancel", "Back")]
+
+    def compose(self) -> ComposeResult:
+        intro = Text()
+        intro.append("Paste (Ctrl+V) or type your code, then press Enter. "
+                     "Spaces, dashes and capitals don't matter.\n", style=PAPER)
+        intro.append("It takes the place of any case in progress.", style=SMOKE)
+        with Vertical(classes="dialog wide"):
+            yield Static(heading("Enter a save code"), classes="dialog-title")
+            yield Static(intro)
+            yield CodeInput(placeholder="N1-ABCDE-FGHIJ-...", id="code-input")
+            yield Static(id="code-error")
+            yield Static(Text("Enter to open the case, Esc to go back", style=SMOKE))
+
+    def on_input_submitted(self, event: Input.Submitted):
+        try:
+            self.app.engine.load_code(event.value)
+        except SaveCodeError as error:
+            self.query_one("#code-error", Static).update(Text(str(error), style=BLOOD))
+            return
+        self.dismiss(True)
+
+    def action_cancel(self):
+        self.dismiss(False)
 
 
 def notes_page(engine: GameEngine) -> TextModal:
@@ -239,6 +391,29 @@ def load_modal(engine: GameEngine) -> ChoiceModal:
                        [(str(i), f"Slot {i}: {label}", exists) for i, exists, label in engine.get_save_slots()])
 
 
+def difficulty_modal() -> ChoiceModal:
+    return ChoiceModal("Choose your difficulty",
+                       [(key, f"{rules.name:<11}{rules.blurb}", True) for key, rules in DIFFICULTIES.items()],
+                       above=Text("It stays the same for the whole case.", style=SMOKE),
+                       selected=DEFAULT_DIFFICULTY)
+
+
+def achievements_page(tracker: Achievements) -> TextModal:
+    """Unlocked achievements, and hints for the rest"""
+    entries = tracker.entries()
+    body = Text()
+    body.append(f"\n{sum(unlocked for _, unlocked in entries)} of {len(entries)} unlocked. "
+                f"They carry over between cases.\n\n", style=SMOKE)
+    for a, unlocked in entries:
+        if unlocked:
+            body.append(f" ★ {a.name:<15}", style=f"bold {AMBER}")
+            body.append(f"{a.text}\n", style=PAPER)
+        else:
+            body.append(f" ☆ {a.name:<15}", style=f"bold {SMOKE}")
+            body.append(f"{a.hint}\n", style=SMOKE)
+    return TextModal("Achievements", body)
+
+
 # =============================================================================
 # TITLE
 # =============================================================================
@@ -253,23 +428,33 @@ class TitleScreen(Screen):
         tagline.append("   Solve etymological riddles to uncover the truth.", style=SMOKE)
         with Vertical(id="title-box"):
             yield Static(title)
-            yield RainScene(art.TITLE_SCENE)
             yield Static(tagline)
-            yield OptionList(
-                Option("New case", id="new"),
-                Option("Continue", id="continue"),
-                Option("Load a saved case", id="load"),
-                Option("Etymology notebook", id="notebook"),
-                Option("Quit", id="quit"),
-                id="title-menu",
-            )
+            # The menu sits beside the scene so it fits a 100x30 terminal however long it gets
+            with Horizontal(id="title-row"):
+                yield RainScene(art.TITLE_SCENE)
+                yield OptionList(
+                    Option("New case", id="new"),
+                    Option("Continue", id="continue"),
+                    Option("Load a saved case", id="load"),
+                    Option("Enter a save code", id="code"),
+                    Option("Etymology notebook", id="notebook"),
+                    Option("Achievements", id="achievements"),
+                    Option("Settings", id="settings"),
+                    Option("Quit", id="quit"),
+                    id="title-menu",
+                )
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
         engine = self.app.engine
         choice = event.option.id
         if choice == "new":
-            engine.new_game()
-            self.app.switch_screen(GameScreen())
+            self.app.push_screen(difficulty_modal(), self._start)
+        elif choice == "code":
+            self.app.push_screen(CodeEntryModal(), self._code_entered)
+        elif choice == "achievements":
+            self.app.push_screen(achievements_page(self.app.achievements))
+        elif choice == "settings":
+            self.app.push_screen(SettingsModal(), lambda _: self.query_one(RainScene).apply_motion())
         elif choice == "continue":
             if engine.load_game(0):
                 self.app.switch_screen(GameScreen())
@@ -285,6 +470,16 @@ class TitleScreen(Screen):
     def _loaded(self, slot: Optional[str]):
         if slot and self.app.engine.load_game(int(slot)):
             self.app.switch_screen(GameScreen())
+
+    def _start(self, difficulty: Optional[str]):
+        if difficulty:
+            self.app.engine.new_game(difficulty)
+            self.app.switch_screen(GameScreen())
+
+    def _code_entered(self, restored: bool):
+        if restored:
+            self.app.switch_screen(GameScreen())
+            self.notify("Case restored from your save code.")
 
 
 # =============================================================================
@@ -305,6 +500,7 @@ class GameScreen(Screen):
         Binding("b", "notebook", "Notebook"),
         Binding("t", "travel", "Travel"),
         Binding("v", "confront", "Confront Volkov"),
+        Binding("a", "achievements", "Achievements", show=False),
         Binding("m,escape", "menu", "Menu"),
     ]
 
@@ -495,7 +691,8 @@ class GameScreen(Screen):
         if res.streak_bonus:
             t.append(f"\nStreak x{self.engine.state.streak}: +{res.streak_bonus} bonus", style=AMBER)
         if res.heart_restored:
-            t.append("\nThree clean answers in a row steady your nerve. +1 ♥", style=BLOOD)
+            t.append(f"\n{self.engine.difficulty().streak_heart} clean answers in a row steady your nerve. +1 ♥",
+                     style=BLOOD)
         t.append("\n")
         if res.unlocked:
             t.append(f"\nNEW LEAD: {LOCATIONS[res.unlocked].name}\n", style=f"bold {AMBER}")
@@ -506,15 +703,20 @@ class GameScreen(Screen):
 
     def render_sidebar(self) -> Text:
         s = self.engine.state
+        rules = self.engine.difficulty()
         t = Text()
         t.append("CASE FILE\n\n", style=f"bold {AMBER}")
+        t.append(f"Mode    {rules.name}\n", style=SMOKE)
         t.append("Sanity  ", style=SMOKE)
         for i in range(s.max_sanity):
             t.append("♥" if i < s.sanity else "♡", style=BLOOD if i < s.sanity else SMOKE)
         t.append(f"\nScore   {s.score}\n", style=SMOKE)
         t.append("Streak  ", style=SMOKE)
-        # Progress toward the next heart
-        t.append("◆" * (s.streak % 3) + "◇" * (3 - s.streak % 3), style=AMBER)
+        every = rules.streak_heart
+        if every:  # progress toward the next heart
+            t.append("◆" * (s.streak % every) + "◇" * (every - s.streak % every), style=AMBER)
+        else:
+            t.append(str(s.streak), style=AMBER)
         t.append("\n\n")
 
         t.append(f"EVIDENCE {len(s.inventory)}", style=f"bold {AMBER}")
@@ -537,7 +739,10 @@ class GameScreen(Screen):
         t.append(f"\nNOTES {len(self.engine.case_notes())}", style=f"bold {AMBER}")
         t.append("  (n)\n", style=SMOKE)
         t.append(f"NOTEBOOK {len(self.engine.notebook)}/{len(ALL_RIDDLES)}", style=f"bold {AMBER}")
-        t.append("  (b)", style=SMOKE)
+        t.append("  (b)\n", style=SMOKE)
+        entries = self.app.achievements.entries()
+        t.append(f"ACHIEVEMENTS {sum(unlocked for _, unlocked in entries)}/{len(entries)}", style=f"bold {AMBER}")
+        t.append("  (a)", style=SMOKE)
         return t
 
     # --- Actions -------------------------------------------------------------
@@ -551,8 +756,9 @@ class GameScreen(Screen):
         if action == "go":
             return self.mode == "result" and bool(self.last and self.last.unlocked)
         if action == "hint":
+            cost = self.engine.hint_cost(bool(self.eliminated))
             return (self.asking and not in_showdown and not self.hint_shown
-                    and bool(self.eliminated or self.engine.state.inventory))
+                    and (cost == "free" or (cost == "evidence" and bool(self.engine.state.inventory))))
         if action == "evidence":
             return bool(self.engine.state.inventory) and (not in_showdown or self.asking)
         if action == "confront":
@@ -665,7 +871,7 @@ class GameScreen(Screen):
                 self.render_all()
 
     def action_hint(self):
-        if self.eliminated:
+        if self.engine.hint_cost(bool(self.eliminated)) == "free":
             self.hint_shown = True
             self.render_all()
         else:
@@ -684,6 +890,9 @@ class GameScreen(Screen):
 
     def action_notebook(self):
         self.app.push_screen(notebook_page(self.engine))
+
+    def action_achievements(self):
+        self.app.push_screen(achievements_page(self.app.achievements))
 
     def action_travel(self):
         s = self.engine.state
@@ -727,7 +936,7 @@ class GameScreen(Screen):
             return
         self.elena_guess = ELENA_OPTIONS[int(choice)]
         self.engine.travel(FINAL_LOCATION)
-        self.showdown = self.engine.start_showdown()
+        self.showdown = self.engine.start_showdown(self.elena_guess)
         self.new_question()
 
     def finish_showdown(self):
@@ -748,6 +957,9 @@ class GameScreen(Screen):
             ("notebook", "Etymology notebook", True),
             ("save", "Save", True),
             ("load", "Load", True),
+            ("code", "Show save code", True),
+            ("achievements", "Achievements", True),
+            ("settings", "Settings", True),
             ("title", "Title screen", True),
         ]), self._menu_choice)
 
@@ -756,6 +968,12 @@ class GameScreen(Screen):
             self.action_notes()
         elif choice == "notebook":
             self.action_notebook()
+        elif choice == "code":
+            self.app.push_screen(SaveCodeModal(self.engine.save_code()))
+        elif choice == "achievements":
+            self.action_achievements()
+        elif choice == "settings":
+            self.app.push_screen(SettingsModal())
         elif choice == "save":
             self.app.push_screen(ChoiceModal("Save to slot", [
                 (str(i), f"Slot {i}: {label}", True) for i, _, label in self.engine.get_save_slots()
@@ -795,13 +1013,18 @@ class NoirApp(App):
     #sidebar {{ width: 36; border: heavy #3a3a3a; padding: 0 1; }}
     #title-box {{ align: center middle; width: 100%; height: 100%; }}
     #title-box Static {{ width: auto; }}
-    #title-menu {{ width: 40; height: auto; background: #0b0b0b; border: round {AMBER}; }}
+    #title-row {{ width: auto; height: auto; align-vertical: middle; }}
+    #title-menu {{ width: 30; height: auto; margin-left: 2; background: #0b0b0b; border: round {AMBER}; }}
     ChoiceModal, EndScreen, TextModal {{ align: center middle; background: rgba(0, 0, 0, 0.7); }}
+    SettingsModal, SaveCodeModal, CodeEntryModal {{ align: center middle; background: rgba(0, 0, 0, 0.7); }}
     .dialog {{ width: 60; height: auto; background: #141414; border: heavy {AMBER}; padding: 1 2; }}
     .dialog OptionList {{ height: auto; max-height: 12; background: #141414; border: none; }}
     .dialog-title {{ margin-bottom: 1; }}
     .wide {{ width: 68; }}
     .end {{ width: 70; }}
+    .code {{ width: 58; }}
+    #code-input {{ margin-top: 1; background: #0b0b0b; border: tall {AMBER}; }}
+    #code-error {{ height: auto; margin-bottom: 1; }}
     .page {{ width: 96; max-height: 90%; }}
     .page VerticalScroll {{ height: auto; max-height: 36; }}
     OptionList > .option-list--option-highlighted {{ background: {AMBER}; color: #0b0b0b; text-style: bold; }}
@@ -811,9 +1034,22 @@ class NoirApp(App):
     def __init__(self, save_dir: Optional[Path] = None):
         super().__init__()
         self.engine = GameEngine(save_dir)
+        self.settings = Settings.load(self.engine.SAVE_DIR)
+        self.achievements = Achievements(self.engine)
+        self.achievements.on_unlock = self.announce
 
     def on_mount(self):
         self.push_screen(TitleScreen())
+
+    def announce(self, achievement: Achievement):
+        self.notify(achievement.text, title=f"★ Achievement: {achievement.name}", timeout=8, markup=False)
+
+    def on_delivery_complete(self, event: events.DeliveryComplete):
+        if event.path:  # in a terminal the file is saved locally; in a browser it downloads
+            self.notify(f"Saved to {event.path}", markup=False)
+
+    def on_delivery_failed(self, event: events.DeliveryFailed):
+        self.notify(f"Couldn't save the file: {event.exception}", severity="error", markup=False)
 
 
 def main():
