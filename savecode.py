@@ -61,6 +61,7 @@ def encode(data: dict) -> str:
 def decode(code: str) -> dict:
     """The dict inside a code. Forgives case, spaces, dashes, line breaks and 0/1/8 for O/I/B."""
     text = re.sub(r"[^0-9A-Za-z]", "", code).upper()
+    text = re.sub(rf"^{PREFIX}[IL]", f"{PREFIX}1", text)  # N1 copied as NI or Nl
     if not text:
         raise SaveCodeError("Type or paste a save code first.")
     if len(text) > MAX_CODE:

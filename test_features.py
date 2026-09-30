@@ -151,6 +151,7 @@ class SaveCodeTest(FeatureTest):
             code.replace("-", " "),
             "\n".join(savecode.lines(code, groups=3)),
             prefix + body.replace("O", "0").replace("I", "1").replace("B", "8"),
+            "nl" + body,
             "  " + code.replace("-", "") + "  ",
         ]
         for text in sloppy:
