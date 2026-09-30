@@ -183,18 +183,21 @@ class TextModal(ModalScreen[None]):
 class EndScreen(ModalScreen[None]):
     """Ending or game over card"""
 
-    BINDINGS = [Binding("enter", "done", "Back to title")]
+    BINDINGS = [Binding("enter", "done", "Back to title"), Binding("c", "copy", "Copy result")]
 
-    def __init__(self, engine: GameEngine, title: str, text: str, triumph: bool, dead: bool = False):
+    def __init__(self, engine: GameEngine, title: str, text: str, triumph: bool, dead: bool = False,
+                 share: Optional[str] = None):
         super().__init__()
         self.engine, self.end_title, self.text = engine, title, text
         self.triumph, self.dead = triumph, dead
+        self.share = share  # the daily case's result, to paste into a chat
 
     def compose(self) -> ComposeResult:
         s = self.engine.state
         color = BLOOD if self.dead else AMBER
         body = Text()
-        body.append(art.GAME_OVER if self.dead else art.LOGO, style=color)
+        if not self.share or self.app.size.height >= 40:  # on a short screen the result to share wins
+            body.append(art.GAME_OVER if self.dead else art.LOGO, style=color)
         body.append(f"\n{self.end_title}\n\n", style=f"bold {color}")
         body.append(f"{self.text}\n\n", style=PAPER)
         body.append(f"Riddles solved   {self.engine.solved_count()}/{len(self.engine.case_riddles())}\n", style=SMOKE)
@@ -202,9 +205,20 @@ class EndScreen(ModalScreen[None]):
         body.append(f"Final score      {s.score}\n\n", style=SMOKE)
         body.append("All our words are connected." if self.triumph else "The Babel Society wins. For now.",
                     style=f"italic {PAPER}")
-        body.append("\n\nPress Enter", style=SMOKE)
         with Vertical(classes="dialog end"):
             yield Static(body)
+            if self.share:
+                yield Static(heading("\nToday's result, to share"))
+                yield Static(Text(self.share, style=PAPER), id="share")
+                yield Static(Text("Press c to copy it, or select it with the mouse.", style=SMOKE))
+            yield Static(Text("\nPress Enter", style=SMOKE))
+
+    def check_action(self, action: str, parameters: tuple) -> Optional[bool]:
+        return bool(self.share) if action == "copy" else True
+
+    def action_copy(self):
+        self.app.copy_to_clipboard(self.share)
+        self.notify("Result copied. Paste it wherever you like.")
 
     def action_done(self):
         self.dismiss(None)
@@ -263,6 +277,7 @@ class TitleScreen(Screen):
             yield Static(tagline)
             yield OptionList(
                 Option("New case", id="new"),
+                Option(self.daily_label(), id="daily"),
                 Option("Continue", id="continue"),
                 Option("Load a saved case", id="load"),
                 Option("Etymology notebook", id="notebook"),
@@ -270,12 +285,30 @@ class TitleScreen(Screen):
                 id="title-menu",
             )
 
+    def on_resize(self, event):
+        # On a short terminal the whole menu matters more than the rain
+        self.query_one(RainScene).display = event.size.height >= 32
+
+    def daily_label(self) -> str:
+        status = self.app.engine.daily_status()
+        return {"new": "Daily case", "in progress": "Daily case (continue)"}.get(status, "Daily case (done: replay)")
+
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
         engine = self.app.engine
         choice = event.option.id
         if choice == "new":
             engine.new_game()
             self.app.switch_screen(GameScreen())
+        elif choice == "daily":
+            resumed = engine.start_daily()
+            self.app.switch_screen(GameScreen())
+            if resumed:
+                self.app.notify("Back to today's case.")
+            elif engine.state.replay:
+                self.app.notify("You have closed today's case already. A replay won't change your result.")
+            else:
+                self.app.notify(f"The daily case for {engine.state.daily}: everyone gets these riddles today. "
+                                "It is shorter, and it doesn't touch your other case.")
         elif choice == "continue":
             if engine.load_game(0):
                 self.app.switch_screen(GameScreen())
@@ -528,6 +561,8 @@ class GameScreen(Screen):
         s = self.engine.state
         t = Text()
         t.append("CASE FILE\n\n", style=f"bold {AMBER}")
+        if s.daily:
+            t.append(f"Daily case {s.daily}{'  (replay)' if s.replay else ''}\n", style=VIOLET)
         t.append("Sanity  ", style=SMOKE)
         for i in range(s.max_sanity):
             t.append("♥" if i < s.sanity else "♡", style=BLOOD if i < s.sanity else SMOKE)
@@ -625,8 +660,10 @@ class GameScreen(Screen):
         if self.showdown and self.showdown.finished:
             self.finish_showdown()
         elif not self.showdown and self.engine.is_game_over():
+            share = self.engine.finish_daily("GAME OVER")
             self.app.push_screen(
-                EndScreen(self.engine, "GAME OVER", "Volkov's men found you first.", triumph=False, dead=True),
+                EndScreen(self.engine, "GAME OVER", "Volkov's men found you first.", triumph=False, dead=True,
+                          share=share),
                 self._back_to_title)
         else:
             self.render_all()
@@ -753,10 +790,11 @@ class GameScreen(Screen):
     def finish_showdown(self):
         won = self.showdown.won
         title, text = self.engine.get_ending(self.elena_guess, won)
-        self.app.push_screen(EndScreen(self.engine, title, text, triumph=won), self._back_to_title)
+        share = self.engine.finish_daily(title, self.elena_guess)
+        self.app.push_screen(EndScreen(self.engine, title, text, triumph=won, share=share), self._back_to_title)
 
     def _back_to_title(self, _=None):
-        self.engine.new_game()
+        self.engine.end_case()
         self.app.switch_screen(TitleScreen())
 
     # --- Menu ---------------------------------------------------------------------
@@ -822,6 +860,7 @@ class NoirApp(App):
     .dialog-title {{ margin-bottom: 1; }}
     .wide {{ width: 68; }}
     .end {{ width: 70; }}
+    #share {{ width: auto; border: round {AMBER}; padding: 0 1; }}
     .page {{ width: 96; max-height: 90%; }}
     .page VerticalScroll {{ height: auto; max-height: 36; }}
     OptionList > .option-list--option-highlighted {{ background: {AMBER}; color: #0b0b0b; text-style: bold; }}

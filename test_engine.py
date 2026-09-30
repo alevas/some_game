@@ -348,6 +348,123 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(e.load_game(2))
         self.assertEqual(e.state.selection["Library"], [3])
 
+    # --- The daily case -------------------------------------------------------------
+
+    def play_daily(self, day="2026-09-30"):
+        """Start the daily case, solve it all, win the showdown"""
+        e = self.engine
+        e.start_daily(day)
+        self.play_through()
+        sd = e.start_showdown()
+        while not sd.finished:
+            sd.answer(sd.current.answer)
+        return sd
+
+    def test_seeded_pick_is_stable(self):
+        """Same seed, same pick, on any computer and Python version (sha256, not random)"""
+        self.assertEqual(engine.seeded_sample(list(range(10)), 3, "noir"), [5, 9, 6])
+
+    def test_daily_case_is_the_same_for_everyone(self):
+        e = self.engine
+        self.assertFalse(e.start_daily("2026-09-30"))
+        first = copy.deepcopy(e.state.selection)
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        other = GameEngine(Path(elsewhere.name))
+        other.start_daily("2026-09-30")
+        self.assertEqual(other.state.selection, first)
+        self.assertEqual([r.id for r in e.start_showdown().riddles], [r.id for r in other.start_showdown().riddles])
+        for loc in LOCATIONS.values():
+            self.assertEqual(len(first[loc.id]), loc.riddles_per_daily_case)
+        self.assertLess(len(e.case_riddles()), sum(l.riddles_per_case + bool(l.lead_riddle) for l in LOCATIONS.values()))
+        days = {str(e.state.selection) for day in ("2026-10-01", "2026-10-02", "2026-10-03") if not e.start_daily(day)}
+        self.assertGreater(len(days), 1, "another day, other riddles")
+        self.assertRegex(engine.utc_today(), r"^\d{4}-\d\d-\d\d$")
+
+    def test_daily_story_still_works(self):
+        """The shorter case still unlocks every place and every beat"""
+        sd = self.play_daily()
+        e = self.engine
+        self.assertEqual(e.state.unlocked_locations, list(LOCATIONS))
+        for loc in LOCATIONS.values():
+            self.assertEqual(len(e.beats_unlocked(loc.id)), len(loc.beats), loc.id)
+        self.assertTrue(sd.won)
+        self.assertEqual(e.get_ending(ELENA_ANSWER, True)[0], "The Truth Revealed")
+
+    def test_daily_does_not_touch_the_normal_autosave(self):
+        e = self.engine
+        self.solve_here()  # a normal case, autosaved
+        normal = copy.deepcopy(e.state)
+        self.assertFalse(e.start_daily("2026-09-30"))
+        self.solve_here()
+        self.assertTrue((e.SAVE_DIR / "daily_autosave.json").exists())
+        e.end_case()  # the daily case ends
+        self.assertFalse((e.SAVE_DIR / "daily_autosave.json").exists())
+        self.assertTrue(e.load_game(0))  # Continue: still the normal case
+        self.assertEqual(e.state, normal)
+        self.assertEqual(e.state.daily, "")
+
+    def test_daily_case_resumes(self):
+        e = self.engine
+        e.start_daily("2026-09-30")
+        self.solve_here()
+        solved = list(e.state.solved_riddles)
+        e.new_game()  # a new normal case in between doesn't lose it
+        self.assertEqual(e.daily_status("2026-09-30"), "in progress")
+        self.assertTrue(e.start_daily("2026-09-30"))
+        self.assertEqual(e.state.solved_riddles, solved)
+        self.assertFalse(e.start_daily("2026-10-01"), "yesterday's unfinished case is not today's")
+
+    def test_daily_result_is_recorded_and_replays_are_marked(self):
+        e = self.engine
+        self.assertEqual(e.daily_status("2026-09-30"), "new")
+        self.play_daily()
+        share = e.finish_daily("The Truth Revealed", ELENA_ANSWER)
+        lines = share.split("\n")
+        self.assertEqual(lines[0], f"Noir Riddles · Daily 2026-09-30 · ♥♥♥ · {len(e.case_riddles())}/{len(e.case_riddles())}")
+        self.assertEqual(lines[1].replace(" ", ""), "🟩" * len(e.case_riddles()))
+        self.assertEqual(lines[2], "Volkov 🟩🟩🟩 · Elena found · The Truth Revealed")
+        self.assertNotIn("replay", share)
+        e.end_case()
+        self.assertEqual(e.daily_status("2026-09-30"), "done")
+
+        self.assertFalse(e.start_daily("2026-09-30"))
+        self.assertTrue(e.state.replay)
+        e.answer(e.current_riddle(), "__wrong__")
+        e.answer(e.current_riddle(), "__wrong__")
+        e.answer(e.current_riddle(), "__wrong__")
+        replay = e.finish_daily("GAME OVER")
+        self.assertIn("· replay", replay.split("\n")[0])
+        self.assertIn("♡♡♡", replay)
+        self.assertTrue(replay.split("\n")[1].startswith("🟥"))
+        self.assertEqual(replay.split("\n")[2], f"Caught at {LOCATIONS['ClientOffice'].name}")
+        record = e.daily_records()["2026-09-30"]
+        self.assertEqual(record["share"], share, "the first result stands")
+        self.assertEqual(record["replays"], 1)
+
+    def test_daily_result_gives_nothing_away(self):
+        e = self.engine
+        self.play_daily()
+        share = e.finish_daily("The Truth Revealed", ELENA_OPTIONS[1])
+        self.assertIn("Elena lost", share)
+        for rid in e.case_riddles():
+            self.assertNotIn(e.riddles[rid].answer, share)
+        self.assertNotIn(ELENA_ANSWER, share)
+
+    def test_showdown_log(self):
+        e = self.engine
+        e.state.inventory = ["A"]
+        sd = e.start_showdown()
+        sd.answer("__wrong__")
+        sd.answer(sd.current.answer)
+        sd.dodge("A")
+        sd.answer(sd.current.answer)
+        self.assertEqual(e.state.showdown_log, ["slip", "dodge", "clean"])
+
+    def test_normal_case_has_no_daily_result(self):
+        self.assertIsNone(self.engine.finish_daily("Case Closed"))
+        self.assertEqual(self.engine.daily_records(), {})
+
     # --- Saving -----------------------------------------------------------------
 
     def test_save_load_roundtrip(self):

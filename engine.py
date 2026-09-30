@@ -11,6 +11,9 @@ come back later, but evidence you skip counts against you at the end.
 Evidence is also currency: show it to characters to learn more, trade it for a
 hint, or throw it at Volkov in the final showdown to dodge a question.
 
+Each case asks a random handful of every location's riddles. The daily case is a
+shorter one, picked from the UTC date, so everyone gets the same riddles that day.
+
 The riddles and the story live in data/riddles.toml and data/story.toml, so they
 can be edited without touching the code. They are checked when the game starts.
 """
@@ -25,6 +28,7 @@ import sys
 import textwrap
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Tuple
 
 try:
@@ -518,6 +522,11 @@ START_LOCATION = STORY_ORDER[0]    # the case starts at the first location...
 FINAL_LOCATION = STORY_ORDER[-1]   # ...and ends with Volkov at the last
 
 
+def utc_today() -> str:
+    """The date the daily case goes by, the same all over the world"""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 def seeded_sample(items: list, count: int, seed: str) -> list:
     """`count` of the items, always the same ones for the same seed, on any computer or Python version"""
     return sorted(items, key=lambda item: hashlib.sha256(f"{seed}/{item}".encode()).hexdigest())[:count]
@@ -555,6 +564,9 @@ class GameState:
     unlocked_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     presented: List[str] = field(default_factory=list)  # "location:item" pairs that revealed something
     selection: Dict[str, List[int]] = field(default_factory=pick_riddles)  # this case's riddles at each place
+    daily: str = ""       # the UTC date ("2026-09-30") of a daily case; "" for a normal case
+    replay: bool = False  # a daily case played again after that day's result was recorded
+    showdown_log: List[str] = field(default_factory=list)  # each showdown round: clean, slip, dodge or lost
 
 
 @dataclass
@@ -571,6 +583,12 @@ class AnswerResult:
 # =============================================================================
 # GAME ENGINE
 # =============================================================================
+
+AUTOSAVE = "autosave.json"              # the normal case, for Continue
+DAILY_AUTOSAVE = "daily_autosave.json"  # the daily case in progress
+DAILY_RECORDS = "daily.json"            # every finished daily case, by date
+SHOWDOWN_MARKS = {"clean": "🟩", "slip": "🟨", "dodge": "📁", "lost": "🟥"}  # for the daily result
+
 
 class GameEngine:
     """Core game logic"""
@@ -742,7 +760,88 @@ class GameEngine:
 
     def new_game(self):
         self.state = GameState()
-        (self.SAVE_DIR / "autosave.json").unlink(missing_ok=True)
+        (self.SAVE_DIR / AUTOSAVE).unlink(missing_ok=True)
+
+    def end_case(self):
+        """The case is over (an ending or a game over): drop its autosave and start afresh.
+        A daily case leaves the normal case's autosave alone."""
+        self.autosave_path().unlink(missing_ok=True)
+        self.state = GameState()
+
+    # --- The daily case ------------------------------------------------------------
+
+    def start_daily(self, day: Optional[str] = None) -> bool:
+        """Start the daily case for a UTC date (today by default), or pick up that day's case
+        where it was left. Returns True when resumed."""
+        day = day or utc_today()
+        saved = self._read_state(self.SAVE_DIR / DAILY_AUTOSAVE)
+        if saved and saved.daily == day:
+            self.state = saved
+            return True
+        self.state = GameState(selection=pick_riddles(seed=f"daily/{day}", daily=True), daily=day,
+                               replay=day in self.daily_records())
+        return False
+
+    def daily_records(self) -> Dict[str, dict]:
+        """Each finished daily case by date: the result to share, the ending, how many replays"""
+        try:
+            with open(self.SAVE_DIR / DAILY_RECORDS) as f:
+                records = json.load(f)
+            return records if isinstance(records, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def daily_in_progress(self, day: Optional[str] = None) -> bool:
+        saved = self._read_state(self.SAVE_DIR / DAILY_AUTOSAVE)
+        return bool(saved and saved.daily == (day or utc_today()))
+
+    def daily_status(self, day: Optional[str] = None) -> str:
+        """For the title screen: "new", "in progress" or "done" (and replays welcome)"""
+        day = day or utc_today()
+        if self.daily_in_progress(day):
+            return "in progress"
+        return "done" if day in self.daily_records() else "new"
+
+    def finish_daily(self, ending: str, elena_guess: Optional[str] = None) -> Optional[str]:
+        """Call when a case ends. For a daily case, records the day (the first finished play
+        counts; later ones are replays) and returns the result to share. None otherwise."""
+        s = self.state
+        if not s.daily:
+            return None
+        records = self.daily_records()
+        first = records.get(s.daily)
+        share = self.daily_share(ending, elena_guess, replay=s.replay or first is not None)
+        if first is None:
+            records[s.daily] = {"share": share, "ending": ending, "score": s.score,
+                                "solved": self.solved_count(), "riddles": len(self.case_riddles()), "replays": 0}
+        else:
+            first["replays"] = first.get("replays", 0) + 1
+        with open(self.SAVE_DIR / DAILY_RECORDS, "w") as f:
+            json.dump(records, f, indent=2, ensure_ascii=False)
+        self.autosave_path().unlink(missing_ok=True)  # nothing left to resume
+        return share
+
+    def daily_share(self, ending: str, elena_guess: Optional[str], replay: bool = False) -> str:
+        """A spoiler-free result to paste into a chat, one square per riddle, place by place:
+        green first try, yellow after a slip, red never solved, black never reached"""
+        s = self.state
+        left = max(s.sanity, 0)
+        hearts = "♥" * left + "♡" * (s.max_sanity - left)
+        lines = [f"Noir Riddles · Daily {s.daily} · {hearts} · {self.solved_count()}/{len(self.case_riddles())}"
+                 + (" · replay" if replay else "")]
+
+        def square(rid: int) -> str:
+            if rid in s.solved_riddles:
+                return "🟨" if rid in s.fumbled_riddles else "🟩"
+            return "🟥" if rid in s.fumbled_riddles else "⬛"
+        lines.append(" ".join("".join(square(rid) for rid in self.riddles_at(loc_id)) for loc_id in STORY_ORDER))
+        if s.showdown_log:
+            rounds = "".join(SHOWDOWN_MARKS[r] for r in s.showdown_log)
+            found = "found" if elena_guess == ELENA_ANSWER else "lost"
+            lines.append(f"Volkov {rounds} · Elena {found} · {ending}")
+        else:
+            lines.append(f"Caught at {self.location().name}")
+        return "\n".join(lines)
 
     def answer(self, riddle: Riddle, choice: str) -> AnswerResult:
         """Check an answer and update state"""
@@ -842,20 +941,29 @@ class GameEngine:
         with open(path, 'w') as f:
             json.dump(asdict(self.state), f, indent=2)
 
+    def autosave_path(self) -> Path:
+        """The daily case autosaves on its own, so it never overwrites the case you Continue"""
+        return self.SAVE_DIR / (DAILY_AUTOSAVE if self.state.daily else AUTOSAVE)
+
     def autosave(self):
-        self._write(self.SAVE_DIR / "autosave.json")
+        self._write(self.autosave_path())
 
     def save_game(self, slot: int):
         self._write(self.SAVE_DIR / f"slot_{slot}.json")
         self.autosave()
 
     def load_game(self, slot: int = 0) -> bool:
-        """Load a slot; slot 0 is the autosave"""
-        name = "autosave.json" if slot == 0 else f"slot_{slot}.json"
-        save_path = self.SAVE_DIR / name
-        if not save_path.exists():
+        """Load a slot; slot 0 is the autosave (of the normal case: the daily case has its own)"""
+        name = AUTOSAVE if slot == 0 else f"slot_{slot}.json"
+        state = self._read_state(self.SAVE_DIR / name)
+        if state is None:
             return False
+        self.state = state
+        return True
 
+    def _read_state(self, save_path: Path) -> Optional[GameState]:
+        if not save_path.exists():
+            return None
         try:
             with open(save_path, 'r') as f:
                 data = json.load(f)
@@ -867,10 +975,9 @@ class GameEngine:
                 state.unlocked_locations = list(dict.fromkeys([START_LOCATION] + state.visited_locations + [state.current_location]))
             if state.current_location not in self.locations:
                 state.current_location = START_LOCATION
-            self.state = state
-            return True
+            return state
         except (OSError, ValueError, TypeError):
-            return False
+            return None
 
     @staticmethod
     def repair_selection(saved, solved: List[int]) -> Dict[str, List[int]]:
@@ -900,7 +1007,8 @@ class GameEngine:
                     with open(save_path, 'r') as f:
                         data = json.load(f)
                     where = LOCATIONS.get(data.get("current_location"), LOCATIONS[START_LOCATION]).name
-                    slots.append((i, True, f"{where} | Score: {data['score']}, Sanity: {data['sanity']}"))
+                    daily = f"Daily {data['daily']} | " if data.get("daily") else ""
+                    slots.append((i, True, f"{daily}{where} | Score: {data['score']}, Sanity: {data['sanity']}"))
                 except (OSError, ValueError, KeyError):
                     slots.append((i, False, "Corrupted"))
             else:
@@ -914,8 +1022,15 @@ class Showdown:
 
     def __init__(self, engine: GameEngine):
         self.engine = engine
-        self.riddles = random.sample(VOLKOV_RIDDLES, SHOWDOWN_ROUNDS)
+        day = engine.state.daily
+        if day:  # everyone faces the same questions on the same day
+            ids = seeded_sample([r.id for r in VOLKOV_RIDDLES], SHOWDOWN_ROUNDS, f"daily/{day}/volkov")
+            self.riddles = [ALL_RIDDLES[i] for i in ids]
+        else:
+            self.riddles = random.sample(VOLKOV_RIDDLES, SHOWDOWN_ROUNDS)
         self.index = 0
+        self.slipped = False  # a wrong answer in the current round
+        engine.state.showdown_log = []
 
     @property
     def current(self) -> Optional[Riddle]:
@@ -939,12 +1054,21 @@ class Showdown:
             self.engine.learn(riddle)
             self.engine.state.score += 30
             self.index += 1
+            self.log("slip" if self.slipped else "clean")
             return True
         self.engine.state.sanity -= 1
+        self.slipped = True
+        if self.lost:
+            self.log("lost")
         return False
 
     def dodge(self, item: str) -> bool:
         if not self.engine.spend_item(item):
             return False
         self.index += 1
+        self.log("dodge")
         return True
+
+    def log(self, outcome: str):
+        self.engine.state.showdown_log.append(outcome)
+        self.slipped = False
