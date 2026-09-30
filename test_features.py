@@ -248,9 +248,16 @@ class AchievementTest(FeatureTest):
         self.win_showdown()
         got = self.unlocked()
         # Bookworm (half the notebook) needs more than one case now that the pool is bigger
-        for aid in ["sherlock", "clean_sweep", "bare_hands", "grimm_reaper", "hot_streak", "polyglot",
-                    "rookie_win", "detective_win"]:
+        for aid in ["sherlock", "clean_sweep", "bare_hands", "hot_streak", "rookie_win", "detective_win"]:
             self.assertIn(aid, got)
+        # These depend on the case's random pick of riddles
+        e = self.engine
+        asked = [e.riddles[rid] for rid in e.case_riddles()]
+        has_sound_shifts = any(r.category == "sound shift" for r in asked)
+        self.assertEqual("grimm_reaper" in got, has_sound_shifts)
+        languages = {r.language for r in asked} | {e.riddles[rid].language for rid in e.notebook if rid in e.riddles}
+        if len(languages) >= 10:
+            self.assertIn("polyglot", got)
         self.assertNotIn("noir_win", got)
         self.assertNotIn("close_shave", got)
 
