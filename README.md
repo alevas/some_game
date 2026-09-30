@@ -51,11 +51,12 @@ a few players at a time is comfortable, and anyone playing loses their game if i
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --name NoirRiddles --collect-submodules textual \
-    --collect-submodules rich --collect-data textual play.py
+    --collect-submodules rich --collect-data textual --add-data "data:data" play.py
 ```
 
 The executable lands in `dist/` (`dist/NoirRiddles`, or `dist/NoirRiddles.exe` when built on Windows).
-PyInstaller only builds for the system it runs on, so build on Windows for Windows players.
+PyInstaller only builds for the system it runs on, so build on Windows for Windows players
+(and write `--add-data "data;data"` there).
 
 ## How the Case Works
 
@@ -76,6 +77,15 @@ unlocks the next location. You can follow the lead right away or keep digging, a
   where Elena is being held (the answer is hidden in your case notes). Then Volkov asks three
   riddles of his own: a wrong answer costs a heart, and throwing a piece of evidence at him
   dodges a question.
+- **Questioning people.** Press `i` to question whoever is at your location; more questions come
+  up as you solve riddles there. Some answers are lies: press one with `p` and pick the evidence
+  that contradicts it (you keep the evidence). The right piece breaks the lie, puts the truth in
+  your case notes and wins their trust; the wrong piece costs trust and a heart (never your last).
+  A distrustful witness won't talk until you solve another riddle at their location. Everyone who
+  trusts you owes you one free hint per case, and Father Thomas, if he trusts you, restores a
+  heart before the showdown.
+- **First-time tips** explain each part of the game once; turn them off with `x` on a tip
+  (console: type `off`) or from the menu.
 - **Etymology notebook.** Every explanation you unlock is kept, across all your cases.
 
 The ending depends on whether you beat Volkov, whether you found Elena, and how many riddles you solved.
@@ -88,6 +98,7 @@ The ending depends on whether you beat Volkov, whether you found Elena, and how 
 | type + `Enter` | Answer (sound shifts, matching, cipher); `Esc` leaves the text box |
 | `h` | Hint (free after a wrong answer, otherwise costs a piece of evidence) |
 | `e` | Evidence: show it to someone, or throw it at Volkov |
+| `i` | Question the person here (`p` presses an answer with evidence) |
 | `Enter` | Continue |
 | `g` | Follow a new lead |
 | `n` | Case notes |
@@ -106,12 +117,14 @@ The console version uses the same letters, typed at the prompt.
 - `serve.py` - Serves the full-screen version as a web page
 - `engine.py` - Game data (riddles, locations, story) and logic shared by both versions
 - `art.py` - ASCII art: scenes, character portraits with expressions, the Berlin map
+- `data/interrogations.toml` - Questions, lies and the evidence that breaks them (explains its own fields)
+- `tips.py` - First-time tips
 - `test_engine.py` - Engine tests (`python -m unittest`)
 - Saves (and the notebook) are stored in `~/.babel_conspiracy_saves/`; the game autosaves after every move
 
 ## System Requirements
 
-- **Python 3.9+** (Textual needs 3.9; the console version runs on 3.8)
+- **Python 3.11+** (the game data is read with `tomllib`)
 - Works on **Windows, Mac, Linux**
 - A terminal with ANSI color and UTF-8 support
 
