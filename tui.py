@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from platformdirs import user_downloads_path  # comes with Textual
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
@@ -329,7 +330,12 @@ class SaveCodeModal(ModalScreen[None]):
                 f"Save code, {self.app.engine.difficulty().name} case at {self.app.engine.location().name}:\n\n"
                 f"{self.code}\n\n"
                 f"To continue, choose Enter a save code on the title screen and paste it.\n")
-        self.app.deliver_text(io.StringIO(text), save_filename="noir-save-code.txt")
+        folder = None  # the browser picks the folder
+        if not self.app.is_web:
+            folder = user_downloads_path()
+            if not folder.is_dir():  # not every machine has one
+                folder = Path.home()
+        self.app.deliver_text(io.StringIO(text), save_directory=folder, save_filename="noir-save-code.txt")
         if self.app.is_web:
             self.notify("Your browser is downloading noir-save-code.txt.")
 
