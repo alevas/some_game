@@ -8,6 +8,7 @@ from unittest import mock
 import art
 from engine import GameEngine, LOCATIONS, RIDDLES, VOLKOV_RIDDLES, ELENA_ANSWER, ELENA_OPTIONS, SHOWDOWN_ROUNDS
 from engine import INTERROGATIONS, STORY_ORDER, TRUSTING, InterrogationDataError, load_interrogations
+from tips import TIPS, Tips
 
 
 # A valid interrogations.toml to break in the loader tests
@@ -440,6 +441,39 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(e.trust("Klaus Weber"), TRUSTING)
         self.assertTrue(all(e.was_asked(q) for q in e.questions() if q.id in ("sister", "last-seen")))
         self.assertEqual([q.id for q in e.caught_lies("ClientOffice")], ["last-seen"])
+
+
+class TipsTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def test_each_tip_shows_once(self):
+        tips = Tips(self.dir)
+        self.assertEqual(tips.take("case"), "case")
+        self.assertIsNone(tips.take("case"))
+        self.assertEqual(tips.take("case", "lead"), "lead")
+        self.assertIsNone(Tips(self.dir).take("case", "lead"))  # remembered in tips.json
+        self.assertEqual(Tips(self.dir).take("nonsense", "evidence"), "evidence")
+
+    def test_tips_can_be_turned_off_and_on(self):
+        Tips(self.dir).set_enabled(False)
+        tips = Tips(self.dir)
+        self.assertIsNone(tips.take("case"))
+        tips.set_enabled(True)
+        self.assertEqual(Tips(self.dir).take("case"), "case")
+        tips.reset()
+        self.assertEqual(Tips(self.dir).take("case"), "case")
+
+    def test_broken_tips_file_is_ignored(self):
+        (self.dir / "tips.json").write_text("{not json")
+        self.assertEqual(Tips(self.dir).take("case"), "case")
+
+    def test_every_tip_has_text_for_both_versions(self):
+        self.assertEqual(set(TIPS), {"case", "typing", "evidence", "lead", "archive", "interrogation"})
+        for key, tip in TIPS.items():
+            self.assertTrue(tip["title"] and tip["tui"] and tip["console"], key)
 
 
 if __name__ == "__main__":
