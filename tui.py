@@ -158,8 +158,18 @@ class AnswerInput(Input):
 class CodeInput(Input):
     """Save code box. A pasted code keeps all its lines; a plain Input keeps only the first."""
 
+    PASTE_HELP = "Paste with Ctrl+Shift+V (Cmd+V on a Mac) or right-click."
+
     def _on_paste(self, event: events.Paste):
         event.text = " ".join(event.text.split())  # Input's own handler runs next and pastes this
+
+    def action_paste(self):
+        # Ctrl+V arrives as a plain key in the browser and many terminals, and pastes only what
+        # was copied in this session. The system clipboard comes in through the paste gestures.
+        if self.app.clipboard:
+            super().action_paste()
+        else:
+            self.notify(self.PASTE_HELP, severity="warning")
 
 
 # =============================================================================
@@ -294,25 +304,25 @@ class SaveCodeModal(ModalScreen[None]):
         self.code = code
 
     def compose(self) -> ComposeResult:
-        body = Text()
-        body.append("Enter it on the title screen (Enter a save code) to pick this case up again, "
-                    "in any browser or terminal.\n\n", style=PAPER)
-        for line in savecode.lines(self.code):
-            body.append(f"{line}\n", style=f"bold {AMBER}")
-        keys = Text("\n")
+        about = Text("Enter it on the title screen (Enter a save code) to pick this case up again, "
+                     "in any browser or terminal.", style=PAPER)
+        keys = Text()
         for key, what in [("c", "copy"), ("d", "download as a file"), ("Esc", "close")]:
             keys.append(key, style=f"bold {AMBER}")
             keys.append(f" {what}    ", style=SMOKE)
-        keys.append("\nOr select the code with the mouse and press Ctrl+C.", style=SMOKE)
+        keys.append("\nOr double-click the code and press Ctrl+C.", style=SMOKE)
         with Vertical(classes="dialog code"):
             yield Static(heading("Save code"), classes="dialog-title")
-            yield Static(body)
+            yield Static(about)
+            # On its own, so a double-click selects just the code
+            yield Static(Text("\n".join(savecode.lines(self.code)), style=f"bold {AMBER}"), id="code-text")
             yield Static(keys)
 
     def action_copy(self):
-        # OSC 52: most terminals, and the browser version (xterm.js in textual-serve), put it on the clipboard
+        # OSC 52: most terminals, and the browser version (xterm.js in textual-serve, on https or
+        # localhost), put it on the clipboard. Nothing reports back whether it worked.
         self.app.copy_to_clipboard(self.code)
-        self.notify("Save code copied. Paste it somewhere safe.")
+        self.notify("Save code copied. If it won't paste, press d to download it instead.")
 
     def action_download(self):
         text = (f"Noir Language Riddles: The Babel Conspiracy\n"
@@ -334,9 +344,9 @@ class CodeEntryModal(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         intro = Text()
-        intro.append("Paste (Ctrl+V) or type your code, then press Enter. "
+        intro.append("Type or paste your code, then press Enter. "
                      "Spaces, dashes and capitals don't matter.\n", style=PAPER)
-        intro.append("It takes the place of any case in progress.", style=SMOKE)
+        intro.append(f"{CodeInput.PASTE_HELP}\nIt takes the place of any case in progress.", style=SMOKE)
         with Vertical(classes="dialog wide"):
             yield Static(heading("Enter a save code"), classes="dialog-title")
             yield Static(intro)
@@ -1023,6 +1033,7 @@ class NoirApp(App):
     .wide {{ width: 68; }}
     .end {{ width: 70; }}
     .code {{ width: 58; }}
+    #code-text {{ margin: 1 0; }}
     #code-input {{ margin-top: 1; background: #0b0b0b; border: tall {AMBER}; }}
     #code-error {{ height: auto; margin-bottom: 1; }}
     .page {{ width: 96; max-height: 90%; }}
