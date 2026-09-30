@@ -15,9 +15,13 @@ import time
 from typing import List, Optional, Tuple
 
 import art
+import savecode
+from achievements import Achievements
 from engine import (GameEngine, Riddle, Showdown, LOCATIONS, STORY_ORDER, ALL_RIDDLES,
-                    ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO)
+                    ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO,
+                    DIFFICULTIES, DEFAULT_DIFFICULTY, SaveCodeError)
 from engine import Question
+from settings import Settings, TOGGLES
 from tips import TIPS, Tips
 
 
@@ -42,7 +46,7 @@ class Color:
     RESET = "\033[0m"
 
 
-COMMANDS = {"n", "b", "t", "m", "v", "e", "h"}
+COMMANDS = {"n", "b", "t", "m", "v", "e", "h", "a"}
 TRUST_COLORS = {"distrustful": "red", "guarded": "bright_black", "trusting": "green"}
 
 
@@ -69,9 +73,9 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
-def typewrite(text: str, color: str = 'italic'):
-    """Print a line a few characters at a time (instantly when not in a terminal)"""
-    if not sys.stdout.isatty():
+def typewrite(text: str, color: str = 'italic', instant: bool = False):
+    """Print a line a few characters at a time (instantly when asked, or when not in a terminal)"""
+    if instant or not sys.stdout.isatty():
         print(c(text, color))
         return
     sys.stdout.write(getattr(Color, color.upper(), ''))
@@ -92,6 +96,8 @@ class TextUI:
     def __init__(self, engine: GameEngine):
         self.engine = engine
         self.tips = Tips(engine.SAVE_DIR)
+        self.settings = Settings.load(engine.SAVE_DIR)
+        self.achievements = Achievements(engine)
 
     def print_header(self):
         print(c(art.LOGO, 'cyan'))
@@ -102,11 +108,19 @@ class TextUI:
 
     def print_status(self):
         s = self.engine.state
+        rules = self.engine.difficulty()
         hearts = "".join(c("♥", "red") if i < s.sanity else c("♡", "bright_black") for i in range(s.max_sanity))
-        streak = "◆" * (s.streak % 3) + "◇" * (3 - s.streak % 3)
-        print(f"\n{c('SANITY: ', 'bright_white')}{hearts} "
-              f"{c(f'| SCORE: {s.score} | STREAK: {streak} | EVIDENCE: {len(s.inventory)}', 'bright_white')}")
+        every = rules.streak_heart  # progress toward the next heart, if streaks restore any
+        streak = "◆" * (s.streak % every) + "◇" * (every - s.streak % every) if every else str(s.streak)
+        status = f"| SCORE: {s.score} | STREAK: {streak} | EVIDENCE: {len(s.inventory)} | {rules.name.upper()}"
+        print(f"\n{c('SANITY: ', 'bright_white')}{hearts} {c(status, 'bright_white')}")
         print(rule())
+        self.print_unlocked()
+
+    def print_unlocked(self):
+        """A banner for each achievement unlocked since the last screen"""
+        for a in self.achievements.take_pending():
+            print(c(f"★ ACHIEVEMENT UNLOCKED: {a.name}. {a.text}", 'bright_yellow'))
 
     def print_scene(self, showdown: Optional[Showdown] = None):
         if showdown:
@@ -136,7 +150,7 @@ class TextUI:
         else:
             trust = self.engine.trust_label(loc.character)
             print(f"{c(loc.character, 'bright_yellow')} {c(f'({trust})', TRUST_COLORS[trust])}{c(':', 'bright_yellow')}")
-        typewrite(line)
+        typewrite(line, instant=self.settings.reduce_motion)
 
     def print_riddle(self, riddle: Riddle, options: List[str], eliminated: List[str],
                      hint_shown: bool, label: str):
@@ -176,6 +190,7 @@ class TextUI:
         print(c("[h] Hint   [e] Evidence   [n] Notes   [b] Notebook   [t] Travel   [m] Menu", 'bright_black'))
         if self.engine.interrogation():
             print(c(f"[i] Question {self.engine.location().character}", 'bright_black'))
+        print(c("[a] Achievements", 'bright_black'))
         if self.engine.can_confront():
             print(c("[v] Confront Volkov (ends the case)", 'bright_red'))
 
@@ -187,9 +202,11 @@ class TextUI:
         print(c(text, color))
         print(c(f"\nRiddles solved: {len(s.solved_riddles)}/{len(self.engine.riddles)}", 'white'))
         print(c(f"Evidence kept: {len(s.inventory)}/{self.engine.total_items()}", 'white'))
+        print(c(f"Difficulty: {self.engine.difficulty().name}", 'white'))
         print(c(f"Final score: {s.score}", 'white'))
         tagline = "All our words are connected." if triumph else "The Babel Society wins. For now."
-        print(f"\n{c(tagline, 'italic')}")
+        print(f"\n{c(tagline, 'italic')}\n")
+        self.print_unlocked()
         pause()
 
     def print_notes(self):
@@ -232,14 +249,20 @@ class TextUI:
             return items[int(choice) - 1]
         return None
 
-    def pay_for_hint(self) -> bool:
-        """A hint costs a piece of evidence, or a favor from someone who trusts you. True if paid."""
+    def pay_for_hint(self, evidence: bool = True) -> bool:
+        """A hint costs a favor from someone who trusts you, or (unless the difficulty
+        rules out hints) a piece of evidence. True if paid."""
         favors = self.engine.favors()
         if not favors:
+            if not evidence:
+                print(c(f"\nNo hints on {self.engine.difficulty().name}. You're on your own, detective.", 'bright_black'))
+                pause()
+                return False
             item = self.choose_item("Trade which evidence for a hint? You lose it.")
             return bool(item and self.engine.spend_item(item))
-        choices = [f"Call in {who}'s favor (free)" for who in favors] + self.engine.state.inventory
-        print(f"\n{c('Call in a favor, or trade evidence for a hint?', 'bright_white')}")
+        choices = [f"Call in {who}'s favor (free)" for who in favors] + (self.engine.state.inventory if evidence else [])
+        title = "Call in a favor, or trade evidence for a hint?" if evidence else "Call in a favor?"
+        print(f"\n{c(title, 'bright_white')}")
         for i, label in enumerate(choices, 1):
             print(f"  {c(f'[{i}]', 'yellow')} {label}")
         choice = ask("Which one (Enter to cancel): ")
@@ -263,7 +286,7 @@ class TextUI:
             print(c(f"  {text}", 'cyan'))
         if input(c("  Enter to continue, or type off to turn tips off: ", 'bright_black')).strip().lower() == "off":
             self.tips.set_enabled(False)
-            print(c("  Tips are off. Turn them back on from the menu (m).", 'bright_black'))
+            print(c("  Tips are off. Turn them back on in Settings (menu, [7]).", 'bright_black'))
 
     def ask_elena(self) -> str:
         """The final deduction. Returns the chosen place."""
@@ -305,6 +328,90 @@ class TextUI:
                 return loc_id
         return None
 
+    def choose_difficulty(self) -> Optional[str]:
+        """Returns a DIFFICULTIES key, or None to go back"""
+        keys = list(DIFFICULTIES)
+        print(f"\n{rule()}\n{c('          CHOOSE YOUR DIFFICULTY', 'bright_white')}\n{rule()}\n")
+        for n, key in enumerate(keys, 1):
+            rules = DIFFICULTIES[key]
+            print(f"{c(f'[{n}]', 'yellow')} {rules.name:<11}{c(rules.blurb, 'bright_black')}")
+        choice = ask(f"Choose (Enter for {DIFFICULTIES[DEFAULT_DIFFICULTY].name}, b to go back): ")
+        if not choice:
+            return DEFAULT_DIFFICULTY
+        if choice.isdigit() and 1 <= int(choice) <= len(keys):
+            return keys[int(choice) - 1]
+        return None
+
+    def show_save_code(self):
+        print(f"\n{rule()}\n{c('          SAVE CODE', 'bright_white')}\n{rule()}")
+        print(c("Copy it or write it down. On the title screen, [c] Enter a save code picks this", 'white'))
+        print(c("case up again, here or in the browser version.\n", 'white'))
+        for line in savecode.lines(self.engine.save_code(), groups=6):
+            print(c(f"  {line}", 'bright_yellow'))
+        pause()
+
+    def enter_save_code(self) -> bool:
+        """Read a save code, which may be pasted over several lines. True once the case is restored."""
+        print(f"\n{rule()}\n{c('          ENTER A SAVE CODE', 'bright_white')}\n{rule()}")
+        print(c("Type or paste your code. Spaces, dashes and capitals don't matter.", 'white'))
+        print(c("Press Enter on an empty line when you're done, or to go back.\n", 'bright_black'))
+        lines: List[str] = []
+        while True:
+            line = input(c("> ", 'yellow'))
+            if not line.strip():
+                break
+            lines.append(line)
+            try:
+                savecode.decode(" ".join(lines))
+                break  # a whole code already: no need for the empty line
+            except SaveCodeError:
+                continue
+        if not lines:
+            return False
+        try:
+            self.engine.load_code(" ".join(lines))
+        except SaveCodeError as error:
+            print(c(f"\n{error}", 'red'))
+            pause()
+            return False
+        print(c("\nCase restored from your save code.", 'green'))
+        pause()
+        return True
+
+    def print_achievements(self):
+        entries = self.achievements.entries()
+        print(f"\n{rule()}\n{c('          ACHIEVEMENTS', 'bright_white')}\n{rule()}")
+        print(c(f"{sum(unlocked for _, unlocked in entries)} of {len(entries)} unlocked. "
+                f"They carry over between cases.\n", 'bright_black'))
+        for a, unlocked in entries:
+            if unlocked:
+                print(f"  {c(f'★ {a.name:<15}', 'bright_yellow')}{a.text}")
+            else:
+                print(c(f"  ☆ {a.name:<15}{a.hint}", 'bright_black'))
+        pause()
+
+    def settings_menu(self):
+        """Switch settings on and off; they are saved at once"""
+        while True:
+            print(f"\n{rule()}\n{c('          SETTINGS', 'bright_white')}\n{rule()}\n")
+            for n, (key, label, what) in enumerate(TOGGLES, 1):
+                on = self.toggle_value(key)
+                print(f"{c(f'[{n}]', 'yellow')} {label}: {c('ON', 'green') if on else c('OFF', 'bright_black')}")
+                print(c(f"    {what}", 'bright_black'))
+            choice = ask("Switch which (Enter to go back): ")
+            if not (choice.isdigit() and 1 <= int(choice) <= len(TOGGLES)):
+                return
+            key = TOGGLES[int(choice) - 1][0]
+            if key == "tips":
+                self.tips.set_enabled(not self.tips.enabled)
+            else:
+                setattr(self.settings, key, not getattr(self.settings, key))
+                self.settings.save(self.engine.SAVE_DIR)
+
+    def toggle_value(self, key: str) -> bool:
+        """A settings row; the tips switch is kept by tips.py, the rest in settings.json"""
+        return self.tips.enabled if key == "tips" else getattr(self.settings, key)
+
     def menu(self) -> str:
         """Save/load menu. Returns 'back', 'loaded' or 'main_menu'."""
         while True:
@@ -313,7 +420,7 @@ class TextUI:
                 print(f"{c(f'Slot {i}:', 'yellow')} {c(label, 'green' if exists else 'bright_black')}")
             print(f"\n{c('[1] Save Game', 'yellow')}\n{c('[2] Load Game', 'yellow')}")
             print(f"{c('[3] Back to Game', 'yellow')}\n{c('[4] Main Menu', 'yellow')}")
-            print(c(f"[5] Tips: {'on' if self.tips.enabled else 'off'}", 'yellow'))
+            print(f"{c('[5] Show Save Code', 'yellow')}\n{c('[6] Achievements', 'yellow')}\n{c('[7] Settings', 'yellow')}")
             choice = ask()
             if choice == "1":
                 slot = ask("Save to slot (1-3, anything else to cancel): ")
@@ -335,7 +442,11 @@ class TextUI:
             elif choice == "4":
                 return "main_menu"
             elif choice == "5":
-                self.tips.set_enabled(not self.tips.enabled)
+                self.show_save_code()
+            elif choice == "6":
+                self.print_achievements()
+            elif choice == "7":
+                self.settings_menu()
 
     def main_menu(self) -> str:
         print(c(art.LOGO, 'cyan'))
@@ -348,6 +459,7 @@ class TextUI:
         print(c('Solve etymological riddles to uncover the truth.', 'bright_black'))
         print(f"\n{c('[1] New Game', 'yellow')}\n{c('[2] Continue', 'yellow')}")
         print(f"{c('[3] Etymology Notebook', 'yellow')}\n{c('[4] Quit', 'yellow')}")
+        print(c("\n[c] Enter a save code   [a] Achievements   [s] Settings", 'yellow'))
         return ask()
 
 
@@ -471,18 +583,18 @@ def finish_case(engine: GameEngine, ui: TextUI):
     if blessing:
         who, line = blessing
         print(c(f"\nYou remember {who}'s blessing:", 'bright_white'))
-        typewrite(f'"{line}"')
+        typewrite(f'"{line}"', instant=ui.settings.reduce_motion)
         print(c("Your nerve steadies. +1 ♥", 'bright_red'))
         pause()
-    won = showdown(engine, ui)
+    won = showdown(engine, ui, guess)
     clear_screen()
     ui.print_end(*engine.get_ending(guess, won), 'green', triumph=won)
     engine.new_game()
 
 
-def showdown(engine: GameEngine, ui: TextUI) -> bool:
+def showdown(engine: GameEngine, ui: TextUI, elena_guess: Optional[str] = None) -> bool:
     """Volkov's questions. Returns True if the detective wins."""
-    sd = engine.start_showdown()
+    sd = engine.start_showdown(elena_guess)
     archive = LOCATIONS[FINAL_LOCATION]
     mood, line = "neutral", None
     while not sd.finished:
@@ -555,6 +667,9 @@ def play(engine: GameEngine, ui: TextUI):
             if choice == "b":
                 ui.print_notebook()
                 continue
+            if choice == "a":
+                ui.print_achievements()
+                continue
             if choice == "e":
                 item = ui.choose_item(f"Show {loc.character} which evidence?")
                 if item:
@@ -565,7 +680,8 @@ def play(engine: GameEngine, ui: TextUI):
                 mood, line = interrogate(engine, ui)
                 continue
             if choice == "h" and riddle and not hint_shown:
-                if not eliminated and not ui.pay_for_hint():
+                cost = engine.hint_cost(bool(eliminated))
+                if cost != "free" and not ui.pay_for_hint(evidence=cost == "evidence"):
                     continue
                 hint_shown = True
                 continue
@@ -615,7 +731,8 @@ def play(engine: GameEngine, ui: TextUI):
             if result.streak_bonus:
                 print(c(f"Streak x{engine.state.streak}: +{result.streak_bonus} bonus", 'bright_yellow'))
             if result.heart_restored:
-                print(c("Three clean answers in a row steady your nerve. +1 ♥", 'bright_red'))
+                print(c(f"{engine.difficulty().streak_heart} clean answers in a row steady your nerve. +1 ♥",
+                        'bright_red'))
             if result.beat:
                 print(c(f'\nNEW NOTE: {loc.character}: "{result.beat}"', 'bright_cyan'))
             if engine.all_riddles_solved():
@@ -644,8 +761,17 @@ def main():
         choice = ui.main_menu()
 
         if choice == "1":
-            engine.new_game()
-            play(engine, ui)
+            difficulty = ui.choose_difficulty()
+            if difficulty:
+                engine.new_game(difficulty)
+                play(engine, ui)
+        elif choice == "c":
+            if ui.enter_save_code():
+                play(engine, ui)
+        elif choice == "a":
+            ui.print_achievements()
+        elif choice == "s":
+            ui.settings_menu()
         elif choice == "2":
             if engine.load_game(0):
                 play(engine, ui)

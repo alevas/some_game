@@ -85,7 +85,21 @@ unlocks the next location. You can follow the lead right away or keep digging, a
   trusts you owes you one free hint per case, and Father Thomas, if he trusts you, restores a
   heart before the showdown.
 - **First-time tips** explain each part of the game once; turn them off with `x` on a tip
-  (console: type `off`) or from the menu.
+  (console: type `off`) or in Settings.
+- **Difficulty.** A new case asks for one:
+  - *Rookie:* 5 hearts, hints always free.
+  - *Detective:* 3 hearts; hints are free after a wrong answer, otherwise they cost evidence.
+  - *Noir:* 2 hearts, no hints except favors from characters who trust you, no hearts back for
+    streaks, and Volkov asks four questions.
+  All the numbers are in the `DIFFICULTIES` table in `engine.py`.
+- **Save codes.** Browser saves disappear when the tab closes, so the menu's *Show save code*
+  turns the whole case into a short code like `N1-DMGTI-MQCBU-…`. Press `c` to copy it, `d` to
+  download it as a text file, or double-click it and press Ctrl+C. To continue, choose *Enter a
+  save code* on the title screen and paste it with Ctrl+Shift+V (Cmd+V on a Mac) or right-click.
+  Spaces, dashes and capitals don't matter.
+- **Achievements.** Twelve of them, from *Sherlock* to *Film Noir*, kept across cases (`a`).
+- **Settings** (title screen or menu): *Reduce motion* stops the title rain and shows dialogue at
+  once (on by default on Render, or with `NOIR_REDUCE_MOTION=1`), and *First-time tips*.
 - **Etymology notebook.** Every explanation you unlock is kept, across all your cases.
 
 The ending depends on whether you beat Volkov, whether you found Elena, and how many riddles you solved.
@@ -102,10 +116,11 @@ The ending depends on whether you beat Volkov, whether you found Elena, and how 
 | `Enter` | Continue |
 | `g` | Follow a new lead |
 | `n` | Case notes |
+| `a` | Achievements |
 | `b` | Etymology notebook |
 | `t` | Travel |
 | `v` | Confront Volkov (in the Archive) |
-| `m` / `Esc` | Menu (save, load, title screen) |
+| `m` / `Esc` | Menu (save, load, save code, achievements, settings, title screen) |
 
 The console version uses the same letters, typed at the prompt.
 
@@ -119,8 +134,12 @@ The console version uses the same letters, typed at the prompt.
 - `art.py` - ASCII art: scenes, character portraits with expressions, the Berlin map
 - `data/interrogations.toml` - Questions, lies and the evidence that breaks them (explains its own fields)
 - `tips.py` - First-time tips
-- `test_engine.py` - Engine tests (`python -m unittest`)
-- Saves (and the notebook) are stored in `~/.babel_conspiracy_saves/`; the game autosaves after every move
+- `settings.py` - Player settings (`settings.json`)
+- `savecode.py` - Save codes
+- `achievements.py` - Achievements and their conditions
+- `test_engine.py`, `test_features.py` - Tests (`python -m unittest`)
+- Saves, the notebook, achievements and settings are stored in `~/.babel_conspiracy_saves/`;
+  the game autosaves after every move
 
 ## System Requirements
 
