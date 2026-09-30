@@ -20,6 +20,7 @@ import json
 import random
 import re
 import sys
+import textwrap
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Tuple
@@ -57,14 +58,19 @@ class Riddle:
     # "choice": pick one of the options
     # "type":   type the word (answer plus any `accepted` spellings)
     # "match":  pair each left-hand word with its right-hand partner; answer is the partners joined by "|"
+    # "order":  put the shuffled `sequence` back in order; answer is the sequence joined by "|"
     kind: str = "choice"
     accepted: List[str] = field(default_factory=list)
     pairs: List[Tuple[str, str]] = field(default_factory=list)
     item_help: Optional[Tuple[str, str]] = None  # (evidence, extra help shown while you hold it)
+    sequence: List[str] = field(default_factory=list)  # an order riddle's steps, first to last
+    diagram: str = ""  # ASCII art shown above a choice riddle's options, e.g. a family tree with a ??? gap
 
     def display_answer(self) -> str:
         if self.kind == "match":
             return ", ".join(f"{left} = {right}" for left, right in self.pairs)
+        if self.kind == "order":
+            return " → ".join(self.sequence)
         return self.answer
 
 
@@ -197,10 +203,29 @@ def check_known_sections(doc: dict, known: Tuple[str, ...], expected: str, filen
 
 # Fields that only some kinds of riddle have
 KIND_FIELDS = {
-    "choice": {"answer", "wrong_answers", "decoys"},
+    "choice": {"answer", "wrong_answers", "decoys", "diagram"},
     "type": {"answer", "accepted"},
     "match": {"pairs"},
+    "order": {"sequence"},
 }
+
+DIAGRAM_WIDTH = 56  # fits the riddle panel of the full-screen version at its smallest (100 columns)
+
+
+def clean_diagram(text: str, f: "Fields") -> str:
+    """Keep a diagram's layout, minus blank lines around it, trailing spaces and common indentation"""
+    if "\t" in text:
+        f.fail("the diagram contains a tab; use spaces so the lines stay aligned")
+    lines = [line.rstrip() for line in textwrap.dedent(text).split("\n")]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    if not lines:
+        f.fail("'diagram' is empty")
+    if max(len(line) for line in lines) > DIAGRAM_WIDTH:
+        f.fail(f"the diagram is wider than {DIAGRAM_WIDTH} characters, so it would not fit on screen")
+    return "\n".join(lines)
 
 
 def build_riddle(table: dict, number: int, filename: str, story: bool) -> Tuple[Riddle, Optional[str]]:
@@ -244,6 +269,8 @@ def build_riddle(table: dict, number: int, filename: str, story: bool) -> Tuple[
             if option.casefold() in seen:
                 f.fail(f"'{option}' is listed twice among its wrong_answers and decoys")
             seen.add(option.casefold())
+        if "diagram" in table:
+            r.diagram = clean_diagram(f.text("diagram", keep_lines=True), f)
     elif kind == "type":
         r.answer = f.text("answer")
         r.accepted = f.texts("accepted", [])
@@ -263,6 +290,13 @@ def build_riddle(table: dict, number: int, filename: str, story: bool) -> Tuple[
             if len({w.casefold() for w in words}) != len(words):
                 f.fail(f"two pairs have the same {side}-hand word, so the letters would be ambiguous")
         r.answer = "|".join(right for _, right in r.pairs)
+    elif kind == "order":
+        r.sequence = f.texts("sequence")
+        if not 3 <= len(r.sequence) <= 6:
+            f.fail(f"needs 3 to 6 steps in its sequence, not {len(r.sequence)}")
+        if len({step.casefold() for step in r.sequence}) != len(r.sequence):
+            f.fail("two steps of the sequence are the same, so the order would be ambiguous")
+        r.answer = "|".join(r.sequence)
 
     item_help = f.get("item_help", None)
     if item_help is not None:
@@ -553,7 +587,12 @@ class GameEngine:
         return new
 
     def match_options(self, riddle: Riddle) -> List[str]:
-        """The right-hand column of a match riddle, shuffled"""
+        """The right-hand column of a match riddle, or the steps of an order riddle, shuffled"""
+        if riddle.kind == "order":
+            steps = list(riddle.sequence)
+            while steps == riddle.sequence:  # never hand over the answer already in order
+                random.shuffle(steps)
+            return steps
         rights = [right for _, right in riddle.pairs]
         random.shuffle(rights)
         return rights
@@ -562,7 +601,7 @@ class GameEngine:
         """Turn typed letters (e.g. 'BCA') into an answer string, or None if they don't make sense"""
         letters = re.sub(r"[^A-Za-z]", "", letters).upper()
         indexes = [ord(ch) - ord("A") for ch in letters]
-        if len(indexes) != len(riddle.pairs) or sorted(indexes) != list(range(len(shown))):
+        if len(indexes) != len(shown) or sorted(indexes) != list(range(len(shown))):
             return None
         return "|".join(shown[i] for i in indexes)
 

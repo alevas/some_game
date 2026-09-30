@@ -25,6 +25,7 @@
 #                   "choice"  pick one of the options with the number keys
 #                   "type"    type the word
 #                   "match"   pair up words by typing letters
+#                   "order"   put shuffled steps in order by typing letters
 #   language      Shown above the riddle. The notebook groups entries by it.
 #   category      Shown above the riddle, e.g. "etymology", "false friends".
 #   difficulty    1, 2 or 3 (leave it out for 1). Worth 10 points per level.
@@ -46,6 +47,11 @@
 #                  guessing through doesn't work.
 #                  Every wrong option must be clearly wrong, and none may
 #                  repeat the answer.
+#   diagram        Optional. ASCII art shown above the options, e.g. a family
+#                  tree with ??? where the answer belongs (??? is highlighted).
+#                  Put it in '''triple single quotes''' so that it is kept
+#                  exactly as drawn. Use spaces, not tabs, and at most 56
+#                  characters per line.
 #
 # Type riddles also have:
 #   answer         The word to type.
@@ -59,6 +65,12 @@
 #                        ["Rat", "advice"],
 #                        ["Chef", "boss"],
 #                    ]
+#
+# Order riddles have, instead of an answer:
+#   sequence       3 to 6 steps in the right order, first to last. The game
+#                  shuffles them and the player types their letters in order.
+#                    sequence = ["Arabic makhāzin", "Italian magazzino",
+#                                "French magasin", "English magazine"]
 #
 # Volkov's riddles for the final showdown are written [[volkov_riddle]], at the
 # end of this file. They have the same fields, except that they have no
@@ -77,7 +89,8 @@
 #   """
 #
 # Inside "double" or """triple""" quotes a backslash (\) starts a special
-# character, so avoid backslashes there.
+# character, so avoid backslashes there. Diagrams go in '''triple single
+# quotes''', where nothing is special and every line is kept as it is.
 
 # =============================================================================
 # WEBER'S OFFICE  (location = "ClientOffice")
@@ -286,6 +299,127 @@ decoys = ["Thirst / δίψα / sitis", "Throne / θρόνος / thronus"]
 hint = "Direct cognates."
 explanation = "English three, Greek τρία (tria), Latin tres, all from PIE *tréyes."
 
+[[riddle]]
+id = 40
+location = "Library"
+kind = "order"
+language = "Alphabets"
+category = "order"
+difficulty = 2
+clue = "A B C"
+text = """
+Herr Schmidt lays four alphabets on the desk, each one learned from another.
+Put them in order, from the oldest ancestor to the letters on this page.
+"""
+sequence = ["Phoenician", "Greek", "Etruscan", "Latin"]
+hint = "The Romans did not learn their letters straight from the Greeks, but from their neighbours to the north."
+explanation = """
+The Phoenicians wrote only consonants. The Greeks borrowed their letters and used some of them
+for vowels. Greek settlers at Cumae passed their alphabet on to the Etruscans, and the Romans
+learned theirs from the Etruscans.
+"""
+item = "Wax Tablet"
+
+[[riddle]]
+id = 41
+location = "Library"
+kind = "order"
+language = "Indo-European"
+category = "order"
+difficulty = 3
+clue = "the oldest texts"
+text = """
+Schmidt's rarest shelf is arranged by age. Put these languages in the order in which they
+were first written down, oldest first.
+"""
+sequence = ["Hittite", "Mycenaean Greek", "Gothic", "Old Church Slavonic"]
+hint = """
+The oldest was pressed into clay in Anatolia. The youngest was first written down by
+missionaries to the Slavs.
+"""
+explanation = """
+Hittite tablets from Hattusa go back to the 17th century BC, the oldest Indo-European texts
+of all. Mycenaean Greek, written in Linear B, follows from the late 15th century BC.
+Wulfila translated the Bible into Gothic in the 4th century AD, and Cyril and Methodius
+created a script for Old Church Slavonic in the 860s.
+"""
+item = "Clay Tablet"
+
+[[riddle]]
+id = 42
+location = "Library"
+language = "Latin"
+category = "family tree"
+difficulty = 2
+clue = "Latin's daughters"
+text = "A family tree from Elena's desk, one name torn away. Which language fills the gap?"
+diagram = '''
+                        Latin
+                          |
+    +----------+----------+-----------+-----------+
+    |          |          |           |           |
+ Italian     French    Spanish    Portuguese     ???
+'''
+answer = "Romanian"
+wrong_answers = ["Albanian", "Hungarian", "Greek"]
+decoys = ["Maltese", "Basque"]
+hint = "Its speakers live on the lower Danube."
+explanation = """
+Romanian grew out of the Latin spoken in the Roman provinces of south-eastern Europe, which
+makes it a sister of Italian, French, Spanish and Portuguese. Albanian took many words from
+Latin, but it is a branch of Indo-European of its own. Hungarian is Uralic, Greek is Hellenic,
+Maltese is Semitic, and Basque is related to no other known language.
+"""
+
+[[riddle]]
+id = 43
+location = "Library"
+language = "Celtic"
+category = "family tree"
+difficulty = 2
+clue = "Insular Celtic"
+text = "Elena's chart of the Celtic languages has a blank under Brittonic. Which language belongs there?"
+diagram = '''
+                          Celtic
+                            |
+           +----------------+----------------+
+           |                                 |
+        Goidelic                         Brittonic
+   +-------+-----------+             +-------+-------+
+   |       |           |             |       |       |
+ Irish    Manx  Scottish Gaelic    Welsh  Cornish   ???
+'''
+answer = "Breton"
+wrong_answers = ["Galician", "Basque", "Flemish"]
+decoys = ["Frisian", "Scots"]
+hint = "It is spoken across the Channel, in France."
+explanation = """
+Breton was brought to Brittany by Britons who crossed the Channel in the early Middle Ages;
+its closest relative is Cornish. Galician is a Romance language, close to Portuguese. Basque
+is related to no other known language, and Flemish, Frisian and Scots are Germanic.
+"""
+
+[[riddle]]
+id = 44
+location = "Library"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "nōmen · ὄνομα · nā́man · name"
+text = """
+Latin nōmen, Greek ónoma, Sanskrit nā́man, English name.
+Which Proto-Indo-European word are they all descended from?
+"""
+answer = "*h₁nómn̥"
+wrong_answers = ["*nókʷts", "*néwos", "*h₁néwn̥"]
+decoys = ["*wódr̥", "*méh₂tēr"]
+hint = "Follow the consonants: n, m, n."
+explanation = """
+All four come from PIE *h₁nómn̥, 'name'. The look-alikes are *nókʷts 'night', *néwos 'new'
+and *h₁néwn̥ 'nine'; *wódr̥ is 'water' and *méh₂tēr 'mother'.
+"""
+item = "Calling Card"
+
 # =============================================================================
 # CAFÉ MOZART  (location = "Cafe")
 # =============================================================================
@@ -433,6 +567,48 @@ decoys = ["Eventually", "Seriously"]
 hint = "Think time, not truth."
 explanation = "Actuellement = currently, at the moment. For 'actually', French says 'en fait'."
 
+[[riddle]]
+id = 47
+location = "Cafe"
+kind = "order"
+language = "Sanskrit"
+category = "order"
+difficulty = 2
+clue = "orange"
+text = """
+Karl peels an orange for you. "Came a long way, this one."
+Put the word's journey in order, oldest first.
+"""
+sequence = ["Sanskrit nāraṅga", "Persian nārang", "Arabic nāranj", "Old French orenge", "English orange"]
+hint = "It travelled west with the fruit, along the trade routes."
+explanation = """
+Sanskrit nāraṅga passed into Persian nārang and Arabic nāranj, then into Italian (narancia,
+later arancia) and Old French orenge; English had the word by the late 1300s. The n probably
+went missing because it was heard as part of the article: una narancia, un'arancia.
+"""
+item = "Orange Peel"
+
+[[riddle]]
+id = 48
+location = "Cafe"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "cow · βοῦς · gáuḥ · govs"
+text = """
+Karl's milk jug is shaped like a cow. English cow, Greek βοῦς (boûs), Sanskrit gáuḥ,
+Latvian govs: which Proto-Indo-European word is their ancestor?
+"""
+answer = "*gʷṓws"
+wrong_answers = ["*h₁éḱwos", "*h₂ówis", "*ḱwṓ"]
+decoys = ["*wĺ̥kʷos", "*h₂ŕ̥tḱos"]
+hint = "Greek turned a gʷ into b, and Germanic turned it into k."
+explanation = """
+All four go back to PIE *gʷṓws, 'cattle'. The others are the horse (*h₁éḱwos), the sheep
+(*h₂ówis), the dog (*ḱwṓ), the wolf (*wĺ̥kʷos) and the bear (*h₂ŕ̥tḱos).
+Latin bōs comes from the same word too, but borrowed from a neighbouring Italic language.
+"""
+
 # =============================================================================
 # ST. NICHOLAS CHURCH  (location = "Church")
 # =============================================================================
@@ -570,6 +746,79 @@ wrong_answers = ["Sister", "Brother"]
 decoys = ["Motor", "Other"]
 hint = "The meaning shifted inside the family."
 explanation = "Albanian motër comes from PIE *méh₂tēr, 'mother'. Along the way it came to mean 'sister'."
+
+[[riddle]]
+id = 56
+location = "Church"
+kind = "order"
+language = "English"
+category = "order"
+difficulty = 3
+clue = "daughter"
+text = """
+Father Thomas traces one family back through the parish books, and one word back through
+the ages. Put these forms of 'daughter' in order, oldest first.
+"""
+sequence = ["*dʰugh₂tḗr", "*duhtēr", "dohtor", "doughter", "daughter"]
+hint = """
+Starred forms are reconstructed, older than any book. The one with a laryngeal (h₂) is the
+oldest of all.
+"""
+explanation = """
+Proto-Indo-European *dʰugh₂tḗr became Proto-Germanic *duhtēr, Old English dohtor,
+Middle English doughter and English daughter. Greek thugátēr and Sanskrit duhitṛ́ come from
+the same word.
+"""
+item = "Baptism Record"
+
+[[riddle]]
+id = 57
+location = "Church"
+language = "Semitic"
+category = "family tree"
+difficulty = 2
+clue = "Semitic"
+text = """
+Father Thomas keeps a chart of the languages of Scripture and their kin. One name has faded.
+Which language belongs in the gap?
+"""
+diagram = '''
+                        Semitic
+                           |
+      +-------------+------+------+-------------+
+      |             |             |             |
+    Hebrew        Arabic       Aramaic         ???
+'''
+answer = "Amharic"
+wrong_answers = ["Coptic", "Persian", "Turkish"]
+decoys = ["Armenian", "Georgian"]
+hint = "It has a script of its own, and is spoken in the Horn of Africa."
+explanation = """
+Amharic, spoken in Ethiopia, is Semitic like Hebrew, Arabic and Aramaic. Coptic, the last
+stage of Egyptian, belongs to a sister branch of the Afroasiatic family, but is not Semitic.
+Persian and Armenian are Indo-European, Turkish is Turkic, and Georgian is Kartvelian.
+"""
+
+[[riddle]]
+id = 58
+location = "Church"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "sister · soror · svásṛ · sestra"
+text = """
+English sister, Latin soror, Sanskrit svásṛ, Russian sestra.
+Which Proto-Indo-European word is behind them all?
+"""
+answer = "*swésōr"
+wrong_answers = ["*bʰréh₂tēr", "*méh₂tēr", "*suHnús"]
+decoys = ["*dʰugh₂tḗr", "*ph₂tḗr"]
+hint = "Sanskrit kept it best: s, v, s, r."
+explanation = """
+All four come from PIE *swésōr, 'sister'. Latin turned the s between vowels into r (soror),
+and Germanic slipped in a t (English sister, German Schwester); Slavic sestra has one too.
+The others are brother, mother, son, daughter and father.
+"""
 
 # =============================================================================
 # SECRET ARCHIVE  (location = "Archive")
@@ -752,6 +1001,110 @@ decoys = ["Thank you", "Welcome"]
 hint = "Namah = bow, te = to you."
 explanation = "From Sanskrit namas (bow/reverence) + te (to you)."
 item = "Namaste Symbol"
+
+[[riddle]]
+id = 64
+location = "Archive"
+kind = "order"
+language = "Arabic"
+category = "order"
+clue = "magazine"
+text = """
+Volkov's archive is a magazine in the old sense of the word: a storehouse.
+Put the word's journey in order, oldest first.
+"""
+sequence = ["Arabic makhāzin", "Italian magazzino", "French magasin", "English magazine"]
+hint = "It crossed the Mediterranean with the merchants, then the Channel."
+explanation = """
+Arabic makhāzin, plural of makhzan 'storehouse', became Italian magazzino and French magasin,
+'warehouse, shop'. English magazine meant a storehouse, often for ammunition, until the
+Gentleman's Magazine of 1731 made it a storehouse of reading.
+"""
+item = "Warehouse Receipt"
+
+[[riddle]]
+id = 65
+location = "Archive"
+language = "Slavic"
+category = "family tree"
+difficulty = 2
+clue = "Slavic"
+text = """
+Pinned above Volkov's desk: a chart of the Slavic languages, one name scratched out.
+Which language belongs in the gap?
+"""
+diagram = '''
+                         Slavic
+                           |
+        +------------------+------------------+
+        |                  |                  |
+       East               West              South
+    +---+---+          +---+---+         +----+----+
+    |       |          |       |         |         |
+ Russian   ???       Polish  Czech    Serbian  Bulgarian
+'''
+answer = "Ukrainian"
+wrong_answers = ["Slovak", "Lithuanian", "Romanian"]
+decoys = ["Hungarian", "Latvian"]
+hint = "Its biggest city stands on the Dnieper."
+explanation = """
+Ukrainian is East Slavic, like Russian and Belarusian. Slovak is Slavic too, but West Slavic,
+with Polish and Czech. Lithuanian and Latvian are Baltic, the Slavs' nearest cousins;
+Romanian is Romance and Hungarian is Uralic.
+"""
+
+[[riddle]]
+id = 66
+location = "Archive"
+language = "Germanic"
+category = "family tree"
+difficulty = 2
+clue = "Germanic"
+text = """
+A chart from Volkov's files: the Germanic languages, with one name blacked out.
+Which language belongs in the gap?
+"""
+diagram = '''
+                             Germanic
+                                |
+            +-------------------+-----------------+
+            |                   |                 |
+          North                West              East
+    +-------+-------+       +---+----+            |
+    |       |       |       |        |            |
+ Swedish  Danish   ???   English   German       Gothic
+'''
+answer = "Icelandic"
+wrong_answers = ["Frisian", "Finnish", "Estonian"]
+decoys = ["Irish", "Latvian"]
+hint = "Its speakers can still read the medieval sagas."
+explanation = """
+Icelandic is North Germanic, like Swedish, Danish, Norwegian and Faroese, and it has changed
+so little that Icelanders can still read the sagas. Frisian is West Germanic, like English
+and German. Finnish and Estonian are Uralic, Irish is Celtic, and Latvian is Baltic.
+"""
+
+[[riddle]]
+id = 67
+location = "Archive"
+language = "Russian"
+category = "reconstruction"
+difficulty = 3
+clue = "волк · vṛ́ka · vilkas · wolf"
+text = """
+Volkov means 'of the wolf', from Russian волк (volk). With Sanskrit vṛ́ka, Lithuanian vilkas
+and English wolf, which Proto-Indo-European word does his name go back to?
+"""
+answer = "*wĺ̥kʷos"
+wrong_answers = ["*h₂ŕ̥tḱos", "*ḱwṓ", "*wódr̥"]
+decoys = ["*h₁éḱwos", "*gʷṓws"]
+hint = "Look for a w and an l."
+explanation = """
+All four come from PIE *wĺ̥kʷos, 'wolf'. Greek lýkos and Latin lupus belong here too, though
+their sounds took unexpected turns. The others are the bear, the dog, water, the horse and
+cattle.
+"""
+item = "Wolf's Head Ring"
 
 # =============================================================================
 # VOLKOV'S SHOWDOWN

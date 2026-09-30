@@ -40,6 +40,12 @@ def heading(text: str) -> Text:
     return Text(text.upper(), style=f"bold {AMBER}")
 
 
+def letters_example(count: int) -> str:
+    """Example input for a letters answer: BCA for three, BCDA for four"""
+    letters = "".join(chr(ord("A") + i) for i in range(count))
+    return letters[1:] + letters[:1]
+
+
 # =============================================================================
 # ATMOSPHERE
 # =============================================================================
@@ -350,7 +356,7 @@ class GameScreen(Screen):
     @property
     def typing(self) -> bool:
         """The current riddle is answered in the text box"""
-        return self.asking and self.riddle.kind in ("type", "match")
+        return self.asking and self.riddle.kind in ("type", "match", "order")
 
     def say(self, text: str, mood: str = "neutral"):
         self.mood = mood
@@ -369,7 +375,7 @@ class GameScreen(Screen):
         self.options = []
         if self.riddle and self.riddle.kind == "choice":
             self.options = self.engine.shuffled_options(self.riddle)
-        elif self.riddle and self.riddle.kind == "match":
+        elif self.riddle and self.riddle.kind in ("match", "order"):
             self.options = self.engine.match_options(self.riddle)
         self.eliminated = []
         self.hint_shown = False
@@ -409,6 +415,8 @@ class GameScreen(Screen):
             self.set_focus(None)  # a hidden box would still swallow Enter
         self.query_one("#sidebar", Static).update(self.render_sidebar())
         self.refresh_bindings()
+        # A tall riddle (a family tree, a long explanation) must not leave its options below the fold
+        self.call_after_refresh(self.query_one("#riddle-box").scroll_visible, animate=False)
 
     def dialogue_line(self) -> Text:
         """Most important line wins: a new lead, a new beat, what was just said, then small talk"""
@@ -446,6 +454,10 @@ class GameScreen(Screen):
         t.append(f"{label}  ·  {r.language}  ·  {r.category}\n", style=f"bold {AMBER}")
         t.append(f"Clue: {r.clue}\n\n", style=f"bold {VIOLET}")
         t.append(f"{r.text}\n\n", style=PAPER)
+        if r.diagram:
+            diagram = Text(f"{r.diagram}\n\n", style=SMOKE, no_wrap=True)
+            diagram.highlight_words(["???"], style=f"bold {AMBER}")
+            t.append_text(diagram)
 
         if r.kind == "choice":
             for i, option in enumerate(self.options):
@@ -457,7 +469,15 @@ class GameScreen(Screen):
                 t.append(f"  {i + 1}. {left:<{width}}", style=PAPER)
                 t.append(f"{chr(ord('A') + i)}. ", style=AMBER)
                 t.append(f"{self.options[i]}\n", style=PAPER)
-            t.append("\nType the letters for 1, 2, 3 in order (e.g. BCA). Esc for commands.", style=SMOKE)
+            numbers = ", ".join(str(i + 1) for i in range(len(r.pairs)))
+            t.append(f"\nType the letters for {numbers} in order (e.g. {letters_example(len(r.pairs))}). "
+                     "Esc for commands.", style=SMOKE)
+        elif r.kind == "order":
+            for i, step in enumerate(self.options):
+                t.append(f"  {chr(ord('A') + i)}. ", style=AMBER)
+                t.append(f"{step}\n", style=PAPER)
+            t.append(f"\nType the letters from first to last (e.g. {letters_example(len(self.options))}). "
+                     "Esc for commands.", style=SMOKE)
         else:
             t.append("Type the word and press Enter. Esc for commands.", style=SMOKE)
 
@@ -569,14 +589,14 @@ class GameScreen(Screen):
         if not text or not self.typing:
             return
         response = text
-        if self.riddle.kind == "match":
+        if self.riddle.kind in ("match", "order"):
             response = self.engine.match_response(self.riddle, self.options, text)
             if response is None:
-                self.notify(f"Type {len(self.riddle.pairs)} different letters, one per word, e.g. BCA.",
-                            severity="warning")
+                self.notify(f"Type {len(self.options)} different letters, each once, "
+                            f"e.g. {letters_example(len(self.options))}.", severity="warning")
                 return
         event.input.value = ""
-        self.respond(response, shown=text.upper() if self.riddle.kind == "match" else text)
+        self.respond(response, shown=text.upper() if self.riddle.kind in ("match", "order") else text)
 
     def respond(self, response: str, shown: Optional[str] = None):
         """Check an answer from the number keys or the text box"""
@@ -599,7 +619,7 @@ class GameScreen(Screen):
             self.options = self.engine.replace_wrong_option(r, self.options, response, self.eliminated)
         else:
             self.eliminated.append(shown or response)
-            if r.kind == "match":
+            if r.kind in ("match", "order"):
                 self.options = self.engine.match_options(r)
 
         if self.showdown and self.showdown.finished:

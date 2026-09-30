@@ -59,6 +59,8 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(len(r.decoys), 2, r.id)
             elif r.kind == "match":
                 self.assertEqual(r.answer, "|".join(right for _, right in r.pairs), r.id)
+            elif r.kind == "order":
+                self.assertEqual(r.answer, "|".join(r.sequence), r.id)
             else:
                 self.assertEqual(r.kind, "type", r.id)
                 self.assertFalse(r.wrong_answers, r.id)
@@ -94,6 +96,27 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(GameEngine.is_correct(r, e.match_response(r, shown, "abc")))
         self.assertIsNone(e.match_response(r, shown, "AAB"))
         self.assertIsNone(e.match_response(r, shown, "AB"))
+
+    def test_order_letters(self):
+        e = self.engine
+        r = e.riddles[64]
+        self.assertEqual(r.kind, "order")
+        for _ in range(30):  # shuffled, but never already in order
+            self.assertNotEqual(e.match_options(r), r.sequence)
+        shown = ["French magasin", "Arabic makhāzin", "English magazine", "Italian magazzino"]
+        self.assertTrue(GameEngine.is_correct(r, e.match_response(r, shown, "B D A C")))
+        self.assertFalse(GameEngine.is_correct(r, e.match_response(r, shown, "BADC")))
+        self.assertIsNone(e.match_response(r, shown, "BDA"))
+        self.assertEqual(r.display_answer(), "Arabic makhāzin → Italian magazzino → French magasin → English magazine")
+
+    def test_family_tree_diagram(self):
+        trees = [r for r in RIDDLES if r.diagram]
+        self.assertGreaterEqual(len(trees), 5)
+        for r in trees:
+            self.assertEqual(r.kind, "choice", r.id)
+            self.assertIn("???", r.diagram, r.id)
+            self.assertGreater(r.diagram.count("\n"), 2, r.id)
+            self.assertLessEqual(max(len(line) for line in r.diagram.split("\n")), 56, r.id)
 
     def test_cipher_wheel_helps(self):
         e = self.engine
@@ -334,6 +357,25 @@ class DataFileTest(unittest.TestCase):
         riddles, story = self.docs()
         self.riddle(riddles, 31)["decoys"] = ["hand", "leg"]
         self.assertDataError(riddles, story, "riddle 31", "'decoys' does not belong in a type riddle")
+
+    def test_order_needs_three_steps(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 64)["sequence"] = ["Arabic makhāzin", "English magazine"]
+        self.assertDataError(riddles, story, "riddle 64", "3 to 6 steps")
+
+    def test_diagram_only_on_choice_riddles(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 31)["diagram"] = "a\n|\nb"
+        self.assertDataError(riddles, story, "riddle 31", "'diagram' does not belong in a type riddle")
+
+    def test_diagram_layout_is_kept(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 42)["diagram"] = "\n      Latin\n        |\n   +----+----+\n  ???\n\n"
+        data = load_game_data(riddles, story)
+        self.assertEqual(next(r for r in data.riddles if r.id == 42).diagram,
+                         "    Latin\n      |\n +----+----+\n???")
+        self.riddle(riddles, 42)["diagram"] = "x" * 57
+        self.assertDataError(riddles, story, "riddle 42", "wider than 56")
 
     def test_unknown_location(self):
         riddles, story = self.docs()

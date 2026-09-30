@@ -53,6 +53,12 @@ def rule(color: str = "yellow", char: str = "=") -> str:
     return c(char * 60, color)
 
 
+def letters_example(count: int) -> str:
+    """Example input for a letters answer: BCA for three, BCDA for four"""
+    letters = "".join(chr(ord("A") + i) for i in range(count))
+    return letters[1:] + letters[:1]
+
+
 def ask(prompt: str = "Choose: ") -> str:
     return input(f"\n{c(prompt, 'bright_white')}").strip().lower()
 
@@ -135,6 +141,9 @@ class TextUI:
         print(c(f"[{label}: {riddle.language} · {riddle.category}]", 'bright_cyan'))
         print(c(f'Clue: {riddle.clue}', 'bright_magenta'))
         print(c(riddle.text, 'italic'))
+        if riddle.diagram:
+            print()
+            print(c(riddle.diagram, 'white').replace("???", c("???", 'bright_yellow') + Color.WHITE))
         print(rule('yellow', '-'))
 
         if riddle.kind == "choice":
@@ -146,7 +155,14 @@ class TextUI:
             print()
             for i, (left, _) in enumerate(riddle.pairs):
                 print(f"  {i + 1}. {left:<{width}}{c(chr(ord('A') + i) + '.', 'yellow')} {options[i]}")
-            print(c("\nType the letters for 1, 2, 3 in order (e.g. BCA).", 'bright_black'))
+            numbers = ", ".join(str(i + 1) for i in range(len(riddle.pairs)))
+            print(c(f"\nType the letters for {numbers} in order (e.g. {letters_example(len(riddle.pairs))}).",
+                    'bright_black'))
+        elif riddle.kind == "order":
+            print()
+            for i, step in enumerate(options):
+                print(f"  {c(chr(ord('A') + i) + '.', 'yellow')} {step}")
+            print(c(f"\nType the letters from first to last (e.g. {letters_example(len(options))}).", 'bright_black'))
         else:
             print(c("\nType the word.", 'bright_black'))
 
@@ -314,10 +330,10 @@ def read_response(engine: GameEngine, riddle: Riddle, options: List[str], choice
         if choice.isdigit() and 1 <= int(choice) <= len(options):
             return options[int(choice) - 1]
         return None
-    if riddle.kind == "match":
+    if riddle.kind in ("match", "order"):
         response = engine.match_response(riddle, options, choice)
         if response is None and choice:
-            print(c(f"Type {len(riddle.pairs)} different letters, one per word, e.g. BCA.", 'red'))
+            print(c(f"Type {len(options)} different letters, each once, e.g. {letters_example(len(options))}.", 'red'))
             pause()
         return response
     return choice or None
@@ -328,7 +344,7 @@ def fresh_options(engine: GameEngine, riddle: Optional[Riddle]) -> List[str]:
         return []
     if riddle.kind == "choice":
         return engine.shuffled_options(riddle)
-    if riddle.kind == "match":
+    if riddle.kind in ("match", "order"):
         return engine.match_options(riddle)
     return []
 
@@ -338,8 +354,8 @@ def after_wrong(engine: GameEngine, riddle: Riddle, options: List[str], response
     """Reshape the options after a wrong answer so guessing through doesn't work"""
     if riddle.kind == "choice":
         return engine.replace_wrong_option(riddle, options, response, eliminated)
-    eliminated.append(response.replace("|", ", "))
-    return engine.match_options(riddle) if riddle.kind == "match" else options
+    eliminated.append(response.replace("|", " → " if riddle.kind == "order" else ", "))
+    return engine.match_options(riddle) if riddle.kind in ("match", "order") else options
 
 
 def finish_case(engine: GameEngine, ui: TextUI):
