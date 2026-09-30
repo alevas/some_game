@@ -120,7 +120,7 @@ ACHIEVEMENTS: List[Achievement] = [
     Achievement("rookie_win", "First Collar", "Beat Volkov on any difficulty.",
                 "Volkov beaten. Every detective starts somewhere.", victory("rookie")),
     Achievement("detective_win", "Private Eye", "Beat Volkov on Detective or Noir.",
-                "Volkov beaten on Detective.", victory("detective")),
+                "Volkov beaten without a rookie's safety net.", victory("detective")),
     Achievement("noir_win", "Film Noir", "Beat Volkov on Noir.",
                 "Two hearts, no hints, and still you won.", victory("noir")),
 ]
