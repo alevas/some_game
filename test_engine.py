@@ -1,12 +1,18 @@
 """Engine tests. Run with: python -m unittest"""
 
+import copy
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import art
+import engine
 from engine import GameEngine, LOCATIONS, RIDDLES, VOLKOV_RIDDLES, ELENA_ANSWER, ELENA_OPTIONS, SHOWDOWN_ROUNDS
+from engine import DataError, load_game_data, read_toml
 
 
 class EngineTest(unittest.TestCase):
@@ -256,6 +262,126 @@ class EngineTest(unittest.TestCase):
         fresh = GameEngine()
         self.assertTrue(fresh.load_game(0))
         self.assertEqual(fresh.state.solved_riddles, [1])
+
+
+class DataFileTest(unittest.TestCase):
+    """The data files are checked on load, and mistakes are reported in words"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.riddles_doc = read_toml("riddles.toml")
+        cls.story_doc = read_toml("story.toml")
+
+    def docs(self):
+        return copy.deepcopy(self.riddles_doc), copy.deepcopy(self.story_doc)
+
+    @staticmethod
+    def riddle(doc, rid):
+        return next(t for t in doc["riddle"] + doc["volkov_riddle"] if t["id"] == rid)
+
+    @staticmethod
+    def place(doc, loc_id):
+        return next(t for t in doc["location"] if t["id"] == loc_id)
+
+    def assertDataError(self, riddles_doc, story_doc, *fragments):
+        with self.assertRaises(DataError) as caught:
+            load_game_data(riddles_doc, story_doc)
+        for fragment in fragments:
+            self.assertIn(fragment, str(caught.exception))
+
+    def test_real_files_load(self):
+        data = load_game_data(*self.docs())
+        self.assertEqual([r.id for r in data.riddles], [r.id for r in RIDDLES])
+        self.assertEqual(list(data.locations), list(LOCATIONS))
+
+    def test_long_text_lines_are_joined(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["explanation"] = "First line.\n   Second line.\n"
+        data = load_game_data(riddles, story)
+        self.assertEqual(next(r for r in data.riddles if r.id == 3).explanation, "First line. Second line.")
+
+    def test_missing_field(self):
+        riddles, story = self.docs()
+        del self.riddle(riddles, 3)["answer"]
+        self.assertDataError(riddles, story, "data/riddles.toml, riddle 3", "missing field 'answer'")
+
+    def test_misspelt_field(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["hnit"] = "..."
+        self.assertDataError(riddles, story, "riddle 3", "unknown field 'hnit'")
+
+    def test_wrong_type(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["difficulty"] = "hard"
+        self.assertDataError(riddles, story, "riddle 3", "'difficulty' should be a whole number")
+
+    def test_duplicate_id(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 9)["id"] = 3
+        self.assertDataError(riddles, story, "two riddles have id 3")
+
+    def test_answer_among_its_options(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["decoys"] = ["book", "Page"]
+        self.assertDataError(riddles, story, "riddle 3", "the answer 'Book' is also listed")
+
+    def test_too_many_options(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["wrong_answers"] += ["Scroll", "Tome"]
+        self.assertDataError(riddles, story, "riddle 3", "1 to 3 wrong_answers")
+
+    def test_field_of_another_kind(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 31)["decoys"] = ["hand", "leg"]
+        self.assertDataError(riddles, story, "riddle 31", "'decoys' does not belong in a type riddle")
+
+    def test_unknown_location(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 3)["location"] = "Libary"
+        self.assertDataError(riddles, story, "riddle 3", 'unknown location "Libary"')
+
+    def test_lead_placed_elsewhere(self):
+        riddles, story = self.docs()
+        self.riddle(riddles, 2)["location"] = "Cafe"
+        self.assertDataError(riddles, story, 'data/story.toml, location "Library"', "lead_riddle 2")
+
+    def test_unknown_evidence(self):
+        riddles, story = self.docs()
+        self.place(story, "Cafe")["present"][0]["evidence"] = "Sugar Pakcet"
+        self.assertDataError(riddles, story, 'location "Cafe"', "Sugar Pakcet")
+
+    def test_character_without_portrait(self):
+        riddles, story = self.docs()
+        self.place(story, "Cafe")["character"] = "Carl"
+        self.assertDataError(riddles, story, 'location "Cafe"', "no portrait for 'Carl'")
+
+    def test_unreachable_location(self):
+        riddles, story = self.docs()
+        self.place(story, "Cafe")["leads_to"] = "Library"
+        self.assertDataError(riddles, story, 'reaches "Church"')
+
+    def test_elena_answer_must_be_an_option(self):
+        riddles, story = self.docs()
+        story["elena"]["answer"] = "The crypt"
+        self.assertDataError(riddles, story, "[elena]", "not one of the options")
+
+    def test_syntax_error_names_the_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "story.toml").write_text('[[location]]\nid = "Cafe\n', encoding="utf-8")
+            with mock.patch.object(engine, "DATA_DIR", Path(tmp)):
+                with self.assertRaises(DataError) as caught:
+                    read_toml("story.toml")
+        self.assertIn("data/story.toml", str(caught.exception))
+        self.assertIn("line 2", str(caught.exception))
+
+    def test_bundled_data_dir(self):
+        """A PyInstaller onefile build unpacks data/ under sys._MEIPASS"""
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copytree(engine.DATA_DIR, Path(tmp, "data"))
+            code = f"import sys; sys._MEIPASS = {tmp!r}; import engine; print(engine.DATA_DIR)"
+            out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                                 cwd=Path(engine.__file__).parent, check=True).stdout
+        self.assertEqual(out.strip(), str(Path(tmp, "data")))
 
 
 if __name__ == "__main__":
