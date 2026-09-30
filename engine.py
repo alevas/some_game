@@ -17,7 +17,10 @@ import random
 import re
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional, Dict, Tuple
+from typing import Callable, List, Optional, Dict, Tuple
+
+import savecode
+from savecode import SaveCodeError
 
 
 # =============================================================================
@@ -428,6 +431,7 @@ class GameState:
     inventory: List[str] = field(default_factory=list)
     sanity: int = 3
     max_sanity: int = 3
+    difficulty: str = "detective"  # a DIFFICULTIES key; saves from before difficulties load as Detective
     score: int = 0
     streak: int = 0  # riddles solved first try in a row
     visited_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
@@ -447,6 +451,32 @@ class AnswerResult:
 
 
 # =============================================================================
+# DIFFICULTY
+# =============================================================================
+
+@dataclass(frozen=True)
+class Difficulty:
+    name: str
+    hearts: int
+    hints: str            # "free": any time; "earned": free after a wrong answer, otherwise costs evidence; "none"
+    streak_heart: int     # clean answers in a row that restore a heart (0: never)
+    showdown_rounds: int  # questions Volkov asks
+    blurb: str
+
+
+# Every rule that changes with the difficulty, easiest first
+DIFFICULTIES: Dict[str, Difficulty] = {
+    "rookie": Difficulty("Rookie", hearts=5, hints="free", streak_heart=3, showdown_rounds=3,
+                         blurb="5 hearts, hints are always free"),
+    "detective": Difficulty("Detective", hearts=3, hints="earned", streak_heart=3, showdown_rounds=3,
+                            blurb="3 hearts, the case as it was meant to be played"),
+    "noir": Difficulty("Noir", hearts=2, hints="none", streak_heart=0, showdown_rounds=4,
+                       blurb="2 hearts, no hints, no second wind; Volkov asks four"),
+}
+DEFAULT_DIFFICULTY = "detective"
+
+
+# =============================================================================
 # GAME ENGINE
 # =============================================================================
 
@@ -463,8 +493,20 @@ class GameEngine:
             self.SAVE_DIR = Path(save_dir)  # e.g. a private folder per web session
         self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
         self.notebook = self._load_notebook()
+        # Called as listener(engine, event, info) after each move; achievements.py listens here
+        self.listeners: List[Callable[["GameEngine", str, dict], None]] = []
 
     # --- Queries -------------------------------------------------------------
+
+    def difficulty(self) -> Difficulty:
+        return DIFFICULTIES.get(self.state.difficulty, DIFFICULTIES[DEFAULT_DIFFICULTY])
+
+    def hint_cost(self, after_wrong: bool) -> Optional[str]:
+        """What a hint costs right now: "free", "evidence", or None when hints are off"""
+        rules = self.difficulty()
+        if rules.hints == "none":
+            return None
+        return "free" if rules.hints == "free" or after_wrong else "evidence"
 
     def location(self, loc_id: Optional[str] = None) -> Location:
         return self.locations[loc_id or self.state.current_location]
@@ -599,8 +641,9 @@ class GameEngine:
 
     # --- Actions -------------------------------------------------------------
 
-    def new_game(self):
-        self.state = GameState()
+    def new_game(self, difficulty: str = DEFAULT_DIFFICULTY):
+        hearts = DIFFICULTIES[difficulty].hearts
+        self.state = GameState(difficulty=difficulty, sanity=hearts, max_sanity=hearts)
         (self.SAVE_DIR / "autosave.json").unlink(missing_ok=True)
 
     def answer(self, riddle: Riddle, choice: str) -> AnswerResult:
@@ -611,7 +654,9 @@ class GameEngine:
             if riddle.id not in self.state.fumbled_riddles:
                 self.state.fumbled_riddles.append(riddle.id)
             self.autosave()
-            return AnswerResult(False, riddle)
+            result = AnswerResult(False, riddle)
+            self.emit("answer", result=result)
+            return result
 
         result = AnswerResult(True, riddle)
         self.learn(riddle)
@@ -626,7 +671,8 @@ class GameEngine:
             self.state.streak += 1
             result.streak_bonus = min(5 * (self.state.streak - 1), 20)
             self.state.score += result.streak_bonus
-            if self.state.streak % 3 == 0 and self.state.sanity < self.state.max_sanity:
+            every = self.difficulty().streak_heart
+            if every and self.state.streak % every == 0 and self.state.sanity < self.state.max_sanity:
                 self.state.sanity += 1
                 result.heart_restored = True
 
@@ -644,6 +690,7 @@ class GameEngine:
             result.unlocked = loc.leads_to
 
         self.autosave()
+        self.emit("answer", result=result)
         return result
 
     def present(self, item: str) -> Optional[str]:
@@ -654,6 +701,8 @@ class GameEngine:
         if text and key not in self.state.presented:
             self.state.presented.append(key)
             self.autosave()
+        if text:
+            self.emit("present", item=item)
         return text
 
     def spend_item(self, item: str) -> bool:
@@ -664,8 +713,8 @@ class GameEngine:
         self.autosave()
         return True
 
-    def start_showdown(self) -> "Showdown":
-        return Showdown(self)
+    def start_showdown(self, elena_guess: Optional[str] = None) -> "Showdown":
+        return Showdown(self, elena_guess)
 
     def travel(self, loc_id: str) -> bool:
         if loc_id not in self.state.unlocked_locations:
@@ -675,6 +724,12 @@ class GameEngine:
             self.state.visited_locations.append(loc_id)
         self.autosave()
         return True
+
+    def emit(self, event: str, **info):
+        """Tell the listeners what just happened: "answer" (result), "present" (item),
+        "showdown" and "case_end" (showdown)"""
+        for listener in self.listeners:
+            listener(self, event, info)
 
     # --- Etymology notebook (kept across cases) --------------------------------
 
@@ -740,22 +795,57 @@ class GameEngine:
                     with open(save_path, 'r') as f:
                         data = json.load(f)
                     where = LOCATIONS.get(data.get("current_location"), LOCATIONS[START_LOCATION]).name
-                    slots.append((i, True, f"{where} | Score: {data['score']}, Sanity: {data['sanity']}"))
+                    mode = DIFFICULTIES.get(data.get("difficulty"), DIFFICULTIES[DEFAULT_DIFFICULTY]).name
+                    slots.append((i, True, f"{where} | {mode} | Score: {data['score']}, Sanity: {data['sanity']}"))
                 except (OSError, ValueError, KeyError):
                     slots.append((i, False, "Corrupted"))
             else:
                 slots.append((i, False, "Empty"))
         return slots
 
+    # --- Save codes (for players whose saves don't last, like the browser version) --
+
+    def save_code(self) -> str:
+        """The whole case as a code the player can copy or write down"""
+        return savecode.encode(asdict(self.state))
+
+    def load_code(self, code: str):
+        """Restore a case from a save code. It becomes the autosave and loads like Continue,
+        so it goes through the same checks as any save. Raises SaveCodeError (with a message
+        for the player) and leaves everything as it was if the code is no good."""
+        data = savecode.decode(code)
+        defaults = asdict(GameState())
+        for key, value in data.items():
+            default = defaults.get(key)
+            if default is not None and not isinstance(value, type(default)):
+                raise SaveCodeError("That code doesn't hold a case this game can open.")
+
+        path = self.SAVE_DIR / "autosave.json"
+        previous = path.read_bytes() if path.exists() else None
+        with open(path, "w") as f:
+            json.dump(data, f)
+        if not self.load_game(0):
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(previous)
+            raise SaveCodeError("That code doesn't hold a case this game can open.")
+        self.autosave()
+
 
 class Showdown:
-    """The final duel: Volkov asks SHOWDOWN_ROUNDS riddles. A wrong answer costs a heart;
-    throwing a piece of evidence at him dodges the question. Lose your nerve and he escapes."""
+    """The final duel: Volkov asks a few riddles (the difficulty says how many). A wrong answer
+    costs a heart; throwing a piece of evidence at him dodges the question. Lose your nerve
+    and he escapes."""
 
-    def __init__(self, engine: GameEngine):
+    def __init__(self, engine: GameEngine, elena_guess: Optional[str] = None):
         self.engine = engine
-        self.riddles = random.sample(VOLKOV_RIDDLES, SHOWDOWN_ROUNDS)
+        rounds = min(engine.difficulty().showdown_rounds, len(VOLKOV_RIDDLES))
+        self.riddles = random.sample(VOLKOV_RIDDLES, rounds)
         self.index = 0
+        self.elena_guess = elena_guess  # where the detective said Elena is
+        self.mistakes = 0
+        self.dodges = 0
 
     @property
     def current(self) -> Optional[Riddle]:
@@ -779,12 +869,22 @@ class Showdown:
             self.engine.learn(riddle)
             self.engine.state.score += 30
             self.index += 1
+            self._moved()
             return True
         self.engine.state.sanity -= 1
+        self.mistakes += 1
+        self._moved()
         return False
 
     def dodge(self, item: str) -> bool:
         if not self.engine.spend_item(item):
             return False
         self.index += 1
+        self.dodges += 1
+        self._moved()
         return True
+
+    def _moved(self):
+        self.engine.emit("showdown", showdown=self)
+        if self.finished:
+            self.engine.emit("case_end", showdown=self)
