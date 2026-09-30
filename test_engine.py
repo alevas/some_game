@@ -1,6 +1,7 @@
 """Engine tests. Run with: python -m unittest"""
 
 import copy
+import json
 import shutil
 import subprocess
 import sys
@@ -45,8 +46,9 @@ class EngineTest(unittest.TestCase):
     # --- Data -----------------------------------------------------------------
 
     def test_every_riddle_placed_once(self):
-        placed = sorted(i for loc in LOCATIONS.values() for i in self.engine.riddles_at(loc.id))
+        placed = sorted(i for loc in LOCATIONS.values() for i in loc.riddle_ids + [loc.lead_riddle] if i)
         self.assertEqual(placed, sorted(r.id for r in RIDDLES))
+
 
     def test_riddles_are_well_formed(self):
         ids = [r.id for r in RIDDLES + VOLKOV_RIDDLES]
@@ -253,9 +255,88 @@ class EngineTest(unittest.TestCase):
         e = self.engine
         self.assertEqual(e.get_ending(ELENA_ANSWER, False)[0], "Case Closed")
         self.assertEqual(e.get_ending(ELENA_ANSWER, True)[0], "Partial Victory")
-        for rid in list(e.riddles)[:len(e.riddles) // 2 + 1]:
-            e.state.solved_riddles.append(rid)
+        case = e.case_riddles()
+        e.state.solved_riddles.extend(case[:len(case) // 2 + 1])
         self.assertEqual(e.get_ending(ELENA_ANSWER, False)[0], "A Lead, Not a Victory")
+
+    # --- One case, a handful of each pool -------------------------------------------
+
+    def test_each_case_picks_from_the_pools(self):
+        e = self.engine
+        for loc in LOCATIONS.values():
+            picked = e.state.selection[loc.id]
+            self.assertEqual(len(picked), loc.riddles_per_case, loc.id)
+            self.assertEqual(picked, [rid for rid in loc.riddle_ids if rid in picked], "kept in pool order")
+            self.assertNotIn(loc.lead_riddle, picked)
+            if loc.lead_riddle:
+                self.assertEqual(e.riddles_at(loc.id)[-1], loc.lead_riddle, "the lead is always asked")
+        picks = set()
+        for _ in range(5):
+            e.new_game()
+            picks.add(str(e.state.selection))
+        self.assertGreater(len(picks), 1, "new cases pick different riddles")
+
+    def test_counts_follow_the_case(self):
+        e = self.engine
+        case = e.case_riddles()
+        self.assertEqual(len(case), sum(l.riddles_per_case + bool(l.lead_riddle) for l in LOCATIONS.values()))
+        self.assertEqual(e.progress("Library")[1], LOCATIONS["Library"].riddles_per_case + 1)
+        self.assertEqual(e.total_items(), sum(1 for rid in case if e.riddles[rid].item))
+        self.assertLess(len(case), len(RIDDLES))
+
+    def test_beats_and_leads_fit_the_case(self):
+        """Every beat can be heard and every lead reached, in a full case and a daily one"""
+        for daily in (False, True):
+            e = self.engine
+            e.state.selection = engine.pick_riddles(seed="test", daily=daily) if daily else engine.pick_riddles()
+            for loc in LOCATIONS.values():
+                total = len(e.riddles_at(loc.id))
+                thresholds = [e.needed(loc.id, after) for after, _ in loc.beats]
+                self.assertEqual(len(set(thresholds)), len(thresholds), (loc.id, daily))
+                self.assertLessEqual(max(thresholds, default=0), total, (loc.id, daily))
+                self.assertLessEqual(e.needed(loc.id, loc.lead_after), len(e.state.selection[loc.id]), (loc.id, daily))
+
+    def test_perfect_run_hears_every_beat(self):
+        self.play_through()
+        e = self.engine
+        for loc in LOCATIONS.values():
+            self.assertEqual(len(e.beats_unlocked(loc.id)), len(loc.beats), loc.id)
+        self.assertEqual(sorted(e.state.solved_riddles), sorted(e.case_riddles()))
+        self.assertEqual(e.solved_count(), len(e.case_riddles()))
+
+    def test_saves_keep_the_case(self):
+        e = self.engine
+        self.solve_here()
+        picked = copy.deepcopy(e.state.selection)
+        fresh = GameEngine()
+        self.assertTrue(fresh.load_game(0))  # Continue
+        self.assertEqual(fresh.state.selection, picked)
+        e.save_game(1)
+        e.new_game()
+        self.assertNotEqual(e.state.selection, picked)
+        self.assertTrue(e.load_game(1))
+        self.assertEqual(e.state.selection, picked)
+
+    def test_old_saves_get_a_case(self):
+        """A save from before pools keeps what was solved, and fills up each place"""
+        e = self.engine
+        with open(e.SAVE_DIR / "slot_3.json", "w") as f:
+            json.dump({"current_location": "Library", "solved_riddles": [1, 2, 3, 9, 31],
+                       "unlocked_locations": ["ClientOffice", "Library", "Cafe"], "sanity": 2, "score": 50}, f)
+        self.assertTrue(e.load_game(3))
+        library = e.state.selection["Library"]
+        self.assertTrue({3, 9, 31} <= set(library))
+        self.assertEqual(len(library), LOCATIONS["Library"].riddles_per_case)
+        self.assertEqual(e.progress("Library")[0], 4)  # three riddles and the lead
+        for loc in LOCATIONS.values():
+            self.assertEqual(len(e.state.selection[loc.id]), loc.riddles_per_case)
+
+    def test_saved_riddle_removed_from_the_data(self):
+        e = self.engine
+        e.state.selection["Library"] = [3, 9999]
+        e.save_game(2)
+        self.assertTrue(e.load_game(2))
+        self.assertEqual(e.state.selection["Library"], [3])
 
     # --- Saving -----------------------------------------------------------------
 

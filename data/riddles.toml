@@ -19,8 +19,10 @@
 #                 it, so don't renumber existing riddles; give new ones new
 #                 numbers.
 #   location      Where it is asked: "ClientOffice", "Library", "Cafe",
-#                 "Church" or "Archive" (the ids in story.toml). Within a
-#                 location, riddles are asked in the order of this file.
+#                 "Church" or "Archive" (the ids in story.toml). Each case
+#                 asks only some of a location's riddles, picked at random
+#                 (riddles_per_case in story.toml), in the order of this file.
+#                 The lead riddle of a location is asked in every case.
 #   kind          How it is answered. Leave it out for "choice".
 #                   "choice"  pick one of the options with the number keys
 #                   "type"    type the word

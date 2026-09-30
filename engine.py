@@ -16,7 +16,9 @@ can be edited without touching the code. They are checked when the game starts.
 """
 
 import difflib
+import hashlib
 import json
+import math
 import random
 import re
 import sys
@@ -81,7 +83,7 @@ class Location:
     description: str
     character: str
     greeting: str           # what the character says while you investigate
-    riddle_ids: List[int]   # asked in this order
+    riddle_ids: List[int]   # the pool: every riddle placed here but the lead, in the order they are asked
     lead_riddle: Optional[int] = None
     leads_to: Optional[str] = None
     lead_after: int = 0     # riddles to solve here before the lead appears
@@ -91,6 +93,8 @@ class Location:
     good_lines: List[str] = field(default_factory=list)  # reactions to a clean answer
     bad_lines: List[str] = field(default_factory=list)   # reactions to a slip
     present: Dict[str, str] = field(default_factory=dict)  # evidence shown -> what the character reveals
+    riddles_per_case: int = 0        # how many of the pool a case asks (picked at random)
+    riddles_per_daily_case: int = 0  # the same for the shorter daily case
 
 
 # =============================================================================
@@ -307,7 +311,16 @@ def build_riddle(table: dict, number: int, filename: str, story: bool) -> Tuple[
     return r, location
 
 
-def build_location(table: dict, number: int, filename: str) -> Location:
+def scaled(needed: int, picked: int, per_case: int) -> int:
+    """A count written for a full case (a beat's 'after', lead_after), shrunk in proportion
+    when a case picks fewer riddles at the place, so every beat can still be heard"""
+    if per_case <= 0 or picked >= per_case:
+        return needed
+    return math.ceil(needed * picked / per_case)
+
+
+def build_location(table: dict, number: int, filename: str, placed: Dict[int, str]) -> Location:
+    """One [[location]] table. `placed` maps each story riddle id to its location, in file order."""
     lid = table.get("id") if isinstance(table, dict) else None
     where = f"{filename}, location \"{lid}\"" if isinstance(lid, str) else f"{filename}, location number {number}"
     f = Fields(table, where)
@@ -332,6 +345,29 @@ def build_location(table: dict, number: int, filename: str) -> Location:
         b.finish()
     if [after for after, _ in loc.beats] != sorted({after for after, _ in loc.beats}):
         f.fail("beats should be in order of 'after', each with a different number")
+
+    # The pool, and how much of it one case asks
+    loc.riddle_ids = [rid for rid, at in placed.items() if at == loc.id and rid != loc.lead_riddle]
+    pool = len(loc.riddle_ids)
+    loc.riddles_per_case = f.number("riddles_per_case", pool)
+    loc.riddles_per_daily_case = f.number("riddles_per_daily_case", loc.riddles_per_case)
+    if loc.riddles_per_case > pool:
+        f.fail(f"riddles_per_case is {loc.riddles_per_case}, but only {pool} riddles "
+               f"(not counting the lead) are placed here in riddles.toml")
+    if loc.riddles_per_daily_case > loc.riddles_per_case:
+        f.fail("riddles_per_daily_case should not be more than riddles_per_case")
+    if pool and not loc.riddles_per_daily_case:
+        f.fail("riddles_per_case and riddles_per_daily_case should be at least 1")
+    if loc.lead_after > loc.riddles_per_case:
+        f.fail(f"lead_after is {loc.lead_after}, but a case only asks {loc.riddles_per_case} other riddles here")
+    most = loc.riddles_per_case + (1 if loc.lead_riddle else 0)
+    for after, _ in loc.beats:
+        if after > most:
+            f.fail(f"a beat comes after {after} riddles, but a case only asks {most} here")
+    daily = [scaled(after, loc.riddles_per_daily_case, loc.riddles_per_case) for after, _ in loc.beats]
+    if len(set(daily)) != len(daily):
+        f.fail(f"with riddles_per_daily_case = {loc.riddles_per_daily_case}, two beats would come at once in "
+               f"the daily case; raise it, or space the beats further apart")
 
     for n, shown in enumerate(f.tables("present"), 1):
         p = Fields(shown, f"{where}, present {n}")
@@ -404,7 +440,7 @@ def load_game_data(riddles_doc: Optional[dict] = None, story_doc: Optional[dict]
     # --- Locations ---
     locations: Dict[str, Location] = {}
     for n, table in enumerate(entries(story_doc, "location", SF), 1):
-        loc = build_location(table, n, SF)
+        loc = build_location(table, n, SF, placed)
         if loc.id in locations:
             raise DataError(f"{SF}: two locations have the id \"{loc.id}\"")
         locations[loc.id] = loc
@@ -427,14 +463,6 @@ def load_game_data(riddles_doc: Optional[dict] = None, story_doc: Optional[dict]
             if loc.leads_to not in locations or loc.leads_to == loc.id:
                 raise DataError(f"{where}: leads_to \"{loc.leads_to}\" is not another location")
             leads[loc.id] = loc.leads_to
-        loc.riddle_ids = [r.id for r in story if placed[r.id] == loc.id and r.id != loc.lead_riddle]
-        if loc.lead_after > len(loc.riddle_ids):
-            raise DataError(f"{where}: lead_after is {loc.lead_after}, but only "
-                            f"{len(loc.riddle_ids)} other riddles are placed here")
-        most = len(loc.riddle_ids) + (1 if loc.lead_riddle else 0)
-        for after, _ in loc.beats:
-            if after > most:
-                raise DataError(f"{where}: a beat comes after {after} riddles, but only {most} can be solved here")
         for item in loc.present:
             if item not in items:
                 raise DataError(f"{where}: shows the '{item}', but no riddle gives that evidence")
@@ -490,6 +518,25 @@ START_LOCATION = STORY_ORDER[0]    # the case starts at the first location...
 FINAL_LOCATION = STORY_ORDER[-1]   # ...and ends with Volkov at the last
 
 
+def seeded_sample(items: list, count: int, seed: str) -> list:
+    """`count` of the items, always the same ones for the same seed, on any computer or Python version"""
+    return sorted(items, key=lambda item: hashlib.sha256(f"{seed}/{item}".encode()).hexdigest())[:count]
+
+
+def pick_riddles(seed: Optional[str] = None, daily: bool = False) -> Dict[str, List[int]]:
+    """The riddles one case asks at each place (leads not included): a handful of the pool,
+    at random or fixed by a seed, asked in pool order"""
+    selection = {}
+    for loc in LOCATIONS.values():
+        count = loc.riddles_per_daily_case if daily else loc.riddles_per_case
+        if seed is None:
+            chosen = random.sample(loc.riddle_ids, count)
+        else:
+            chosen = seeded_sample(loc.riddle_ids, count, f"{seed}/{loc.id}")
+        selection[loc.id] = [rid for rid in loc.riddle_ids if rid in chosen]
+    return selection
+
+
 # =============================================================================
 # GAME STATE
 # =============================================================================
@@ -507,6 +554,7 @@ class GameState:
     visited_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     unlocked_locations: List[str] = field(default_factory=lambda: [START_LOCATION])
     presented: List[str] = field(default_factory=list)  # "location:item" pairs that revealed something
+    selection: Dict[str, List[int]] = field(default_factory=pick_riddles)  # this case's riddles at each place
 
 
 @dataclass
@@ -544,8 +592,20 @@ class GameEngine:
         return self.locations[loc_id or self.state.current_location]
 
     def riddles_at(self, loc_id: str) -> List[int]:
+        """This case's riddles at a place: its pick from the pool, then the lead"""
         loc = self.locations[loc_id]
-        return loc.riddle_ids + ([loc.lead_riddle] if loc.lead_riddle else [])
+        return self.state.selection.get(loc_id, []) + ([loc.lead_riddle] if loc.lead_riddle else [])
+
+    def case_riddles(self) -> List[int]:
+        """Every riddle this case asks, in story order"""
+        return [rid for loc_id in STORY_ORDER for rid in self.riddles_at(loc_id)]
+
+    def solved_count(self) -> int:
+        return sum(1 for rid in self.case_riddles() if rid in self.state.solved_riddles)
+
+    def needed(self, loc_id: str, count: int) -> int:
+        """A beat's or a lead's count, shrunk when this case asks fewer riddles here than a full case"""
+        return scaled(count, len(self.state.selection.get(loc_id, [])), self.locations[loc_id].riddles_per_case)
 
     def progress(self, loc_id: str) -> tuple:
         """(solved, total) for a location"""
@@ -556,8 +616,8 @@ class GameEngine:
         loc = self.locations[loc_id]
         if not loc.lead_riddle:
             return False
-        solved_here = sum(1 for i in loc.riddle_ids if i in self.state.solved_riddles)
-        return solved_here >= loc.lead_after
+        solved_here = sum(1 for i in self.state.selection.get(loc_id, []) if i in self.state.solved_riddles)
+        return solved_here >= self.needed(loc_id, loc.lead_after)
 
     def current_riddle(self) -> Optional[Riddle]:
         """The lead comes first once it is available, then the rest in order"""
@@ -565,7 +625,7 @@ class GameEngine:
         solved = self.state.solved_riddles
         if self.lead_available(loc.id) and loc.lead_riddle not in solved:
             return self.riddles[loc.lead_riddle]
-        for rid in loc.riddle_ids:
+        for rid in self.state.selection.get(loc.id, []):
             if rid not in solved:
                 return self.riddles[rid]
         return None
@@ -621,7 +681,7 @@ class GameEngine:
 
     def beats_unlocked(self, loc_id: str) -> List[str]:
         solved, _ = self.progress(loc_id)
-        return [text for needed, text in self.locations[loc_id].beats if solved >= needed]
+        return [text for after, text in self.locations[loc_id].beats if solved >= self.needed(loc_id, after)]
 
     def case_notes(self) -> List[Tuple[str, str]]:
         """(location name, note) for everything learned so far, in story order"""
@@ -639,7 +699,8 @@ class GameEngine:
         return [self.locations[i] for i in STORY_ORDER if i in self.state.unlocked_locations]
 
     def total_items(self) -> int:
-        return sum(1 for r in self.riddles.values() if r.item)
+        """Evidence this case can give"""
+        return sum(1 for rid in self.case_riddles() if self.riddles[rid].item)
 
     def can_confront(self) -> bool:
         """Volkov can be confronted once the detective reaches his archive"""
@@ -649,12 +710,13 @@ class GameEngine:
         return self.state.sanity <= 0
 
     def all_riddles_solved(self) -> bool:
-        return len(self.state.solved_riddles) >= len(self.riddles)
+        """Every riddle of this case (not the whole pool) is solved"""
+        return self.solved_count() >= len(self.case_riddles())
 
     def get_ending(self, elena_guess: Optional[str], volkov_beaten: bool) -> tuple:
         """Determine ending from progress, the showdown, and where the detective looked for Elena"""
-        total_riddles = len(self.riddles)
-        solved = len(self.state.solved_riddles)
+        total_riddles = len(self.case_riddles())
+        solved = self.solved_count()
         found = elena_guess == ELENA_ANSWER
 
         if volkov_beaten and found and solved >= total_riddles:
@@ -799,6 +861,7 @@ class GameEngine:
                 data = json.load(f)
 
             state = GameState(**{k: v for k, v in data.items() if k in GameState.__dataclass_fields__})
+            state.selection = self.repair_selection(data.get("selection"), state.solved_riddles)
             # Saves from before locations were unlockable: open everything already visited
             if "unlocked_locations" not in data:
                 state.unlocked_locations = list(dict.fromkeys([START_LOCATION] + state.visited_locations + [state.current_location]))
@@ -808,6 +871,24 @@ class GameEngine:
             return True
         except (OSError, ValueError, TypeError):
             return False
+
+    @staticmethod
+    def repair_selection(saved, solved: List[int]) -> Dict[str, List[int]]:
+        """A saved case's riddles, checked against the pools as they are now. A place missing from
+        the save (a save from before pools, or a new place) keeps the riddles already solved there
+        and gets a fresh random pick for the rest."""
+        saved = saved if isinstance(saved, dict) else {}
+        selection = {}
+        for loc in LOCATIONS.values():
+            kept = saved.get(loc.id)
+            if isinstance(kept, list):
+                selection[loc.id] = [rid for rid in loc.riddle_ids if rid in kept]  # riddles since removed drop out
+                continue
+            done = [rid for rid in loc.riddle_ids if rid in solved]
+            rest = [rid for rid in loc.riddle_ids if rid not in done]
+            extra = random.sample(rest, max(0, min(len(rest), loc.riddles_per_case - len(done))))
+            selection[loc.id] = [rid for rid in loc.riddle_ids if rid in done or rid in extra]
+        return selection
 
     def get_save_slots(self) -> List[tuple]:
         """(slot, exists, label) for slots 1-3"""

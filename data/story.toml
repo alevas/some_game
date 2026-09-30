@@ -25,6 +25,14 @@
 #   good_lines   Reactions to a right answer (one is picked at random).
 #   bad_lines    Reactions to a wrong answer.
 #
+# How many riddles a case asks here (leave both out to ask every one):
+#   riddles_per_case        Each new case picks this many of the riddles placed
+#                           here in riddles.toml, at random, and asks them in
+#                           the order of that file. The lead comes on top: it is
+#                           asked in every case.
+#   riddles_per_daily_case  The same for the shorter daily case, where everyone
+#                           gets the same pick on the same day.
+#
 # The lead (every location but the last has one):
 #   lead_riddle  The id of the riddle that opens the next place. In
 #                riddles.toml it must be placed here (location = this id).
@@ -40,6 +48,11 @@
 #   [[location.beat]]
 #   after = 2           <- after solving this many riddles here (lead included)
 #   text = "..."
+#
+# lead_after and each beat's "after" count for a full case: at most
+# riddles_per_case (plus one for the lead, for beats). In the daily case they
+# shrink in proportion (a beat after 4 of 8 riddles comes after 2 of 4), so
+# every beat can still be heard.
 #
 # What the character says when shown a piece of evidence (the "item" of a
 # riddle in riddles.toml), also one block each, under the location:
@@ -109,6 +122,8 @@ lead_riddle = 2
 lead_after = 3
 leads_to = "Cafe"
 lead_text = "Tucked in Elena's last book: a napkin from Café Mozart, with a table number and a time."
+riddles_per_case = 8
+riddles_per_daily_case = 3
 good_lines = ["Hm. Not bad, for a policeman.", "Correct. Elena would approve."]
 bad_lines = ["Tsk. Look it up, detective.", "My first-year students know that one."]
 
@@ -152,6 +167,8 @@ lead_text = """
 Karl leans in: the men in suits always leave for St. Nicholas when the bells ring.
 They cross themselves on the way out.
 """
+riddles_per_case = 7
+riddles_per_daily_case = 3
 good_lines = ["Sharp. Like the coffee.", "Careful being that clever in here."]
 bad_lines = ["Maybe stick to the coffee, detective.", "The suits are laughing at you."]
 
@@ -193,6 +210,8 @@ Father Thomas unlocks the parish register.
 Every Babel Society meeting is noted, and every entry points to a basement archive near the
 Spree.
 """
+riddles_per_case = 7
+riddles_per_daily_case = 3
 good_lines = ["The Lord gave you a good ear.", "Yes... that is right."]
 bad_lines = ["Pride comes before the fall, my son.", "Slowly. The old words do not hurry."]
 
@@ -232,6 +251,8 @@ Volkov, their leader, has been one step ahead. But you're closing in.
 """
 greeting = "You're too late. The work is already done."
 done_text = "Every word traced to its root. Impressive. Now what, detective?"
+riddles_per_case = 8
+riddles_per_daily_case = 3
 good_lines = ["...Lucky guess.", "So. You have done your reading."]
 bad_lines = ["Ha! Elena would be ashamed of you.", "Every mistake brings my men closer, detective."]
 

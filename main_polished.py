@@ -190,7 +190,7 @@ class TextUI:
         print(c(f'          {title}', f'bright_{color}'))
         print(rule(color))
         print(c(text, color))
-        print(c(f"\nRiddles solved: {len(s.solved_riddles)}/{len(self.engine.riddles)}", 'white'))
+        print(c(f"\nRiddles solved: {self.engine.solved_count()}/{len(self.engine.case_riddles())}", 'white'))
         print(c(f"Evidence kept: {len(s.inventory)}/{self.engine.total_items()}", 'white'))
         print(c(f"Final score: {s.score}", 'white'))
         tagline = "All our words are connected." if triumph else "The Babel Society wins. For now."

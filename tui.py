@@ -197,7 +197,7 @@ class EndScreen(ModalScreen[None]):
         body.append(art.GAME_OVER if self.dead else art.LOGO, style=color)
         body.append(f"\n{self.end_title}\n\n", style=f"bold {color}")
         body.append(f"{self.text}\n\n", style=PAPER)
-        body.append(f"Riddles solved   {len(s.solved_riddles)}/{len(self.engine.riddles)}\n", style=SMOKE)
+        body.append(f"Riddles solved   {self.engine.solved_count()}/{len(self.engine.case_riddles())}\n", style=SMOKE)
         body.append(f"Evidence kept    {len(s.inventory)}/{self.engine.total_items()}\n", style=SMOKE)
         body.append(f"Final score      {s.score}\n\n", style=SMOKE)
         body.append("All our words are connected." if self.triumph else "The Babel Society wins. For now.",
