@@ -9,9 +9,13 @@ Run with: python serve.py                  (then open http://localhost:8000)
           python serve.py --public-url https://example.com   (behind a proxy or tunnel)
 
 Every browser tab gets its own game with its own saves, which last until the tab is closed.
+
+On Render the defaults come from its environment (RENDER, PORT, RENDER_EXTERNAL_URL),
+so the start command is just: python serve.py
 """
 
 import argparse
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -21,9 +25,12 @@ from textual_serve.server import Server
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--host", default="localhost")
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--public-url", default=None, help="the address players use, if it differs from host:port")
+    on_render = "RENDER" in os.environ
+    parser.add_argument("--host", default="0.0.0.0" if on_render else "localhost")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    # textual-serve builds the page's https/wss links from this; behind a proxy it must be the public address
+    parser.add_argument("--public-url", default=os.environ.get("RENDER_EXTERNAL_URL"),
+                        help="the address players use, if it differs from host:port")
     args = parser.parse_args()
 
     tui = Path(__file__).resolve().parent / "tui.py"

@@ -6,6 +6,7 @@ Full-screen ASCII art version (needs Textual: pip install -r requirements.txt)
 Run with: python tui.py
 """
 
+import os
 import random
 import signal
 import sys
@@ -58,7 +59,9 @@ class RainScene(Static):
 
     def on_mount(self):
         self.render_frame()
-        self.set_interval(0.09, self.tick)
+        # Render's free instance has a tenth of a CPU; the animation alone would use it all
+        if not os.environ.get("RENDER"):
+            self.set_interval(0.09, self.tick)
 
     def tick(self):
         for drop in self.drops:

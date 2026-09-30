@@ -25,8 +25,26 @@ python serve.py                  # then open http://localhost:8000
 python serve.py --host 0.0.0.0   # let others on your network play
 ```
 
-Each browser tab gets its own game. To share it beyond your network, run it on a server
-(or behind a tunnel) and pass the address players will use with `--public-url`.
+Each browser tab gets its own game and its own saves, which last until the tab is closed.
+To share it beyond your network, run it on a server (or behind a tunnel) and pass the
+address players will use with `--public-url`.
+
+### Deploy on Render (free)
+
+1. Sign up at [dashboard.render.com](https://dashboard.render.com) with GitHub. No credit card is
+   needed, and **don't add one**: without a card, Render suspends the service at the free limits
+   instead of billing you.
+2. **New → Web Service**, pick this repository, then set:
+   - Language: **Python 3**, Branch: **main**
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `python serve.py`
+   - Instance type: **Free**
+3. Deploy. The game is live at `https://<name>.onrender.com`, and every push to `main` redeploys it.
+
+`serve.py` reads Render's `PORT` and `RENDER_EXTERNAL_URL` by itself, and the title-screen rain is
+switched off there because the free instance only has 0.1 CPU. Free-tier limits to know about:
+the service sleeps after 15 minutes without visitors (the next visitor waits about a minute),
+a few players at a time is comfortable, and anyone playing loses their game if it restarts.
 
 ### Standalone Executable (No Python Required)
 
