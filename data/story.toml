@@ -1,0 +1,295 @@
+# =============================================================================
+# NOIR LANGUAGE RIDDLES: THE STORY
+# =============================================================================
+#
+# The places, the people and what they say, the question about Elena and
+# Volkov's showdown. The riddles themselves are in riddles.toml, which also
+# explains how to write text (quotes, long text over several lines).
+#
+# Lines starting with # are comments: the game ignores them.
+#
+# -----------------------------------------------------------------------------
+# LOCATIONS
+# -----------------------------------------------------------------------------
+# Each place starts with a [[location]] line. They are listed in story order:
+# the case starts at the first one, and the last one is Volkov's, where the
+# showdown happens. The travel menu and the sidebar follow the same order.
+#
+#   id           Short name used by riddles.toml ("location = ...") and by the
+#                ASCII art in art.py (scene, spot on the map). Keep it as is.
+#   name         What the player sees, e.g. "Staatsbibliothek".
+#   character    Who you talk to there. art.py has a portrait for each name.
+#   description  Shown under the scene.
+#   greeting     What the character says before you have learned anything.
+#   done_text    What they say once every riddle here is solved.
+#   good_lines   Reactions to a right answer (one is picked at random).
+#   bad_lines    Reactions to a wrong answer.
+#
+# How many riddles a case asks here (leave both out to ask every one):
+#   riddles_per_case        Each new case picks this many of the riddles placed
+#                           here in riddles.toml, at random, and asks them in
+#                           the order of that file. The lead comes on top: it is
+#                           asked in every case.
+#   riddles_per_daily_case  The same for the shorter daily case, where everyone
+#                           gets the same pick on the same day.
+#
+# The lead (every location but the last has one):
+#   lead_riddle  The id of the riddle that opens the next place. In
+#                riddles.toml it must be placed here (location = this id).
+#   lead_after   How many of the other riddles here must be solved before the
+#                lead riddle shows up.
+#   leads_to     The id of the location it opens.
+#   lead_text    What you learn when you solve it.
+#
+# Beats are things the character lets slip as you solve riddles here. They go
+# into the case notes, and they are how the player works out where Elena is.
+# Write one block per beat, under its location:
+#
+#   [[location.beat]]
+#   after = 2           <- after solving this many riddles here (lead included)
+#   text = "..."
+#
+# lead_after and each beat's "after" count for a full case: at most
+# riddles_per_case (plus one for the lead, for beats). In the daily case they
+# shrink in proportion (a beat after 4 of 8 riddles comes after 2 of 4), so
+# every beat can still be heard.
+#
+# What the character says when shown a piece of evidence (the "item" of a
+# riddle in riddles.toml), also one block each, under the location:
+#
+#   [[location.present]]
+#   evidence = "Case File"
+#   text = "..."
+#
+# -----------------------------------------------------------------------------
+# THE FINALE (at the end of this file)
+# -----------------------------------------------------------------------------
+#   [elena]     question, its options, and the answer: one of the options, but
+#               not the first (the menu highlights the first one).
+#   [showdown]  rounds: how many of the [[volkov_riddle]]s Volkov asks;
+#               intro: what is said as the showdown starts.
+
+# =============================================================================
+# 1. WEBER'S OFFICE
+# =============================================================================
+
+[[location]]
+id = "ClientOffice"
+name = "Weber's Office"
+character = "Klaus Weber"
+description = """
+Berlin, 1947. Rain on the window, a desk lamp, a silent typewriter.
+Elena Weber, a linguist, has disappeared. Her brother found a note in Greek on her desk.
+"""
+greeting = "She said if anything happened to her, I should give this to a detective. It's all in Greek."
+done_text = "Please. Find her."
+lead_riddle = 1
+lead_after = 0
+leads_to = "Library"
+lead_text = """
+The note is a call slip from the Staatsbibliothek.
+Elena's handwriting, dated the day she vanished.
+"""
+good_lines = ["You really can read it!", "Elena said you were good."]
+bad_lines = ["Are you sure you know Greek?", "Please, take your time. For her sake."]
+
+[[location.beat]]
+after = 1
+text = "She walked along the Spree every night. Said the water helped her think."
+
+[[location.present]]
+evidence = "Photograph"
+text = """
+That's Elena outside St. Nicholas, before the war. She loved that church.
+Said its crypt was older than Berlin itself.
+"""
+
+# =============================================================================
+# 2. STAATSBIBLIOTHEK
+# =============================================================================
+
+[[location]]
+id = "Library"
+name = "Staatsbibliothek"
+character = "Herr Schmidt"
+description = """
+Tall shelves stretch into shadow. Manuscripts in Greek, German, Latin.
+The air smells of parchment and secrets. A librarian eyes you suspiciously.
+"""
+greeting = "She was here last week. Asking about Proto-Indo-European again. Always the old roots."
+done_text = "You've read more than most of my students, detective."
+lead_riddle = 2
+lead_after = 3
+leads_to = "Cafe"
+lead_text = "Tucked in Elena's last book: a napkin from Café Mozart, with a table number and a time."
+riddles_per_case = 8
+riddles_per_daily_case = 3
+good_lines = ["Hm. Not bad, for a policeman.", "Correct. Elena would approve."]
+bad_lines = ["Tsk. Look it up, detective.", "My first-year students know that one."]
+
+[[location.beat]]
+after = 2
+text = "She kept requesting the 1690 plans of St. Nicholas. Not the nave. The parts below ground."
+
+[[location.beat]]
+after = 5
+text = """
+The men who came after her asked for the same plans. I told them they were lost.
+They were not.
+"""
+
+[[location.beat]]
+after = 8
+text = "Elena told me once: the oldest words are always buried deepest."
+
+[[location.present]]
+evidence = "Case File"
+text = "Her last call slip: the St. Nicholas plans. Stamped 'returned'. They were never returned."
+
+# =============================================================================
+# 3. CAFÉ MOZART
+# =============================================================================
+
+[[location]]
+id = "Cafe"
+name = "Café Mozart"
+character = "Karl"
+description = """
+Strong coffee and sugar hang in the air.
+Intellectuals and spies share tables in the dim light. A waiter polishes a glass, watching.
+"""
+greeting = "The men in dark suits come in every Tuesday. Always order the same thing."
+done_text = "No more gossip, detective. Just coffee."
+lead_riddle = 24
+lead_after = 3
+leads_to = "Church"
+lead_text = """
+Karl leans in: the men in suits always leave for St. Nicholas when the bells ring.
+They cross themselves on the way out.
+"""
+riddles_per_case = 7
+riddles_per_daily_case = 3
+good_lines = ["Sharp. Like the coffee.", "Careful being that clever in here."]
+bad_lines = ["Maybe stick to the coffee, detective.", "The suits are laughing at you."]
+
+[[location.beat]]
+after = 2
+text = "The suits take bread and soup to go. Every day. Nobody takes soup to go."
+
+[[location.beat]]
+after = 4
+text = "They carry it across the square, toward the church, still steaming."
+
+[[location.beat]]
+after = 6
+text = "Our cellar? Only beer and rats down there. Go look, if you like. I did."
+
+[[location.present]]
+evidence = "Sugar Packet"
+text = "From table six, the suits' table. They always take extra sugar. 'For the lady,' they say."
+
+# =============================================================================
+# 4. ST. NICHOLAS CHURCH
+# =============================================================================
+
+[[location]]
+id = "Church"
+name = "St. Nicholas Church"
+character = "Father Thomas"
+description = """
+Candlelight flickers against stone walls. The sacristan moves silently between shadows.
+Old texts in Greek and Latin line the shelves. The Babel Society has left its mark here.
+"""
+greeting = "The church has secrets, detective. Some older than the building itself."
+done_text = "Go with God. And be careful down there."
+lead_riddle = 12
+lead_after = 2
+leads_to = "Archive"
+lead_text = """
+Father Thomas unlocks the parish register.
+Every Babel Society meeting is noted, and every entry points to a basement archive near the
+Spree.
+"""
+riddles_per_case = 7
+riddles_per_daily_case = 3
+good_lines = ["The Lord gave you a good ear.", "Yes... that is right."]
+bad_lines = ["Pride comes before the fall, my son.", "Slowly. The old words do not hurry."]
+
+[[location.beat]]
+after = 2
+text = "The crypt has been sealed since the bombing in '44. No one goes down there."
+
+[[location.beat]]
+after = 4
+text = """
+Though the sacristan swears he hears a woman singing beneath the altar at night.
+Greek hymns.
+"""
+
+[[location.beat]]
+after = 6
+text = "Forgive me. I lied. They made me give them the crypt key."
+
+[[location.present]]
+evidence = "Arvanitika Notes"
+text = """
+Arvanitika... the sacristan's grandmother spoke it.
+He says the songs beneath the altar sound like this.
+"""
+
+# =============================================================================
+# 5. SECRET ARCHIVE
+# =============================================================================
+
+[[location]]
+id = "Archive"
+name = "Secret Archive"
+character = "Igor Volkov"
+description = """
+Files upon files of linguistic research. The Babel Society's true work is here.
+Volkov, their leader, has been one step ahead. But you're closing in.
+"""
+greeting = "You're too late. The work is already done."
+done_text = "Every word traced to its root. Impressive. Now what, detective?"
+riddles_per_case = 8
+riddles_per_daily_case = 3
+good_lines = ["...Lucky guess.", "So. You have done your reading."]
+bad_lines = ["Ha! Elena would be ashamed of you.", "Every mistake brings my men closer, detective."]
+
+[[location.beat]]
+after = 2
+text = "You think I would keep her here, among my papers? I am not sentimental."
+
+[[location.beat]]
+after = 4
+text = "The river? How romantic. No. Water ruins paper, and she is writing for me."
+
+[[location.beat]]
+after = 6
+text = "She is closer to God than you are, detective. And deeper."
+
+[[location.present]]
+evidence = "Religious Text"
+text = "A hymnal? Put it away. I hear enough hymns from below as it is."
+
+# =============================================================================
+# THE FINALE
+# =============================================================================
+
+# Asked before the showdown. The beats above point to the answer.
+[elena]
+question = "Before you face Volkov: where is Elena being held?"
+options = [
+    "A safe house by the Spree",
+    "The back rooms of the Archive",
+    "The crypt under St. Nicholas",
+    "The cellar of Café Mozart",
+]
+answer = "The crypt under St. Nicholas"
+
+[showdown]
+rounds = 3
+intro = """
+Volkov steps out from between the cabinets.
+"Words are my weapons, detective. Let us see yours."
+"""

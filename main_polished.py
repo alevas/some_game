@@ -48,6 +48,7 @@ class Color:
 
 COMMANDS = {"n", "b", "t", "m", "v", "e", "h", "a"}
 TRUST_COLORS = {"distrustful": "red", "guarded": "bright_black", "trusting": "green"}
+DAILY_LABELS = {"new": "Daily Case", "in progress": "Daily Case (continue)", "done": "Daily Case (done: replay)"}
 
 
 def c(text: str, color: Optional[str] = None) -> str:
@@ -59,6 +60,12 @@ def c(text: str, color: Optional[str] = None) -> str:
 
 def rule(color: str = "yellow", char: str = "=") -> str:
     return c(char * 60, color)
+
+
+def letters_example(count: int) -> str:
+    """Example input for a letters answer: BCA for three, BCDA for four"""
+    letters = "".join(chr(ord("A") + i) for i in range(count))
+    return letters[1:] + letters[:1]
 
 
 def ask(prompt: str = "Choose: ") -> str:
@@ -114,6 +121,8 @@ class TextUI:
         streak = "◆" * (s.streak % every) + "◇" * (every - s.streak % every) if every else str(s.streak)
         status = f"| SCORE: {s.score} | STREAK: {streak} | EVIDENCE: {len(s.inventory)} | {rules.name.upper()}"
         print(f"\n{c('SANITY: ', 'bright_white')}{hearts} {c(status, 'bright_white')}")
+        if s.daily:
+            print(c(f"DAILY CASE {s.daily}{'  (replay)' if s.replay else ''}", 'bright_magenta'))
         print(rule())
         self.print_unlocked()
 
@@ -158,6 +167,9 @@ class TextUI:
         print(c(f"[{label}: {riddle.language} · {riddle.category}]", 'bright_cyan'))
         print(c(f'Clue: {riddle.clue}', 'bright_magenta'))
         print(c(riddle.text, 'italic'))
+        if riddle.diagram:
+            print()
+            print(c(riddle.diagram, 'white').replace("???", c("???", 'bright_yellow') + Color.WHITE))
         print(rule('yellow', '-'))
 
         if riddle.kind == "choice":
@@ -169,7 +181,14 @@ class TextUI:
             print()
             for i, (left, _) in enumerate(riddle.pairs):
                 print(f"  {i + 1}. {left:<{width}}{c(chr(ord('A') + i) + '.', 'yellow')} {options[i]}")
-            print(c("\nType the letters for 1, 2, 3 in order (e.g. BCA).", 'bright_black'))
+            numbers = ", ".join(str(i + 1) for i in range(len(riddle.pairs)))
+            print(c(f"\nType the letters for {numbers} in order (e.g. {letters_example(len(riddle.pairs))}).",
+                    'bright_black'))
+        elif riddle.kind == "order":
+            print()
+            for i, step in enumerate(options):
+                print(f"  {c(chr(ord('A') + i) + '.', 'yellow')} {step}")
+            print(c(f"\nType the letters from first to last (e.g. {letters_example(len(options))}).", 'bright_black'))
         else:
             print(c("\nType the word.", 'bright_black'))
 
@@ -194,18 +213,22 @@ class TextUI:
         if self.engine.can_confront():
             print(c("[v] Confront Volkov (ends the case)", 'bright_red'))
 
-    def print_end(self, title: str, text: str, color: str, triumph: bool):
+    def print_end(self, title: str, text: str, color: str, triumph: bool, share: Optional[str] = None):
         s = self.engine.state
         print(f"\n{rule(color)}")
         print(c(f'          {title}', f'bright_{color}'))
         print(rule(color))
         print(c(text, color))
-        print(c(f"\nRiddles solved: {len(s.solved_riddles)}/{len(self.engine.riddles)}", 'white'))
+        print(c(f"\nRiddles solved: {self.engine.solved_count()}/{len(self.engine.case_riddles())}", 'white'))
         print(c(f"Evidence kept: {len(s.inventory)}/{self.engine.total_items()}", 'white'))
         print(c(f"Difficulty: {self.engine.difficulty().name}", 'white'))
         print(c(f"Final score: {s.score}", 'white'))
         tagline = "All our words are connected." if triumph else "The Babel Society wins. For now."
-        print(f"\n{c(tagline, 'italic')}\n")
+        print(f"\n{c(tagline, 'italic')}")
+        if share:
+            print(c("\nToday's result, to share (select and copy it):\n", 'bright_yellow'))
+            print(share)
+        print()
         self.print_unlocked()
         pause()
 
@@ -459,6 +482,7 @@ class TextUI:
         print(c('Solve etymological riddles to uncover the truth.', 'bright_black'))
         print(f"\n{c('[1] New Game', 'yellow')}\n{c('[2] Continue', 'yellow')}")
         print(f"{c('[3] Etymology Notebook', 'yellow')}\n{c('[4] Quit', 'yellow')}")
+        print(c(f"[d] {DAILY_LABELS[self.engine.daily_status()]}", 'yellow'))
         print(c("\n[c] Enter a save code   [a] Achievements   [s] Settings", 'yellow'))
         return ask()
 
@@ -473,10 +497,10 @@ def read_response(engine: GameEngine, riddle: Riddle, options: List[str], choice
         if choice.isdigit() and 1 <= int(choice) <= len(options):
             return options[int(choice) - 1]
         return None
-    if riddle.kind == "match":
+    if riddle.kind in ("match", "order"):
         response = engine.match_response(riddle, options, choice)
         if response is None and choice:
-            print(c(f"Type {len(riddle.pairs)} different letters, one per word, e.g. BCA.", 'red'))
+            print(c(f"Type {len(options)} different letters, each once, e.g. {letters_example(len(options))}.", 'red'))
             pause()
         return response
     return choice or None
@@ -487,7 +511,7 @@ def fresh_options(engine: GameEngine, riddle: Optional[Riddle]) -> List[str]:
         return []
     if riddle.kind == "choice":
         return engine.shuffled_options(riddle)
-    if riddle.kind == "match":
+    if riddle.kind in ("match", "order"):
         return engine.match_options(riddle)
     return []
 
@@ -497,8 +521,8 @@ def after_wrong(engine: GameEngine, riddle: Riddle, options: List[str], response
     """Reshape the options after a wrong answer so guessing through doesn't work"""
     if riddle.kind == "choice":
         return engine.replace_wrong_option(riddle, options, response, eliminated)
-    eliminated.append(response.replace("|", ", "))
-    return engine.match_options(riddle) if riddle.kind == "match" else options
+    eliminated.append(response.replace("|", " → " if riddle.kind == "order" else ", "))
+    return engine.match_options(riddle) if riddle.kind in ("match", "order") else options
 
 
 def screen_tips(engine: GameEngine, riddle: Optional[Riddle]) -> List[str]:
@@ -588,8 +612,9 @@ def finish_case(engine: GameEngine, ui: TextUI):
         pause()
     won = showdown(engine, ui, guess)
     clear_screen()
-    ui.print_end(*engine.get_ending(guess, won), 'green', triumph=won)
-    engine.new_game()
+    title, text = engine.get_ending(guess, won)
+    ui.print_end(title, text, 'green', triumph=won, share=engine.finish_daily(title, guess))
+    engine.end_case()
 
 
 def showdown(engine: GameEngine, ui: TextUI, elena_guess: Optional[str] = None) -> bool:
@@ -710,8 +735,9 @@ def play(engine: GameEngine, ui: TextUI):
                 if engine.is_game_over():
                     clear_screen()
                     print(c(art.GAME_OVER, 'red'))
-                    ui.print_end("GAME OVER", "Volkov's men found you first.", 'red', triumph=False)
-                    engine.new_game()
+                    ui.print_end("GAME OVER", "Volkov's men found you first.", 'red', triumph=False,
+                                 share=engine.finish_daily("GAME OVER"))
+                    engine.end_case()
                     return
                 continue
 
@@ -780,6 +806,16 @@ def main():
                 pause()
         elif choice == "3":
             ui.print_notebook()
+        elif choice == "d":
+            if engine.start_daily():
+                print(c("\nBack to today's case.", 'bright_black'))
+            elif engine.state.replay:
+                print(c("\nYou have closed today's case already. A replay won't change your result.", 'bright_black'))
+            else:
+                print(c(f"\nThe daily case for {engine.state.daily}: everyone gets these riddles today. "
+                        "It is shorter, and it doesn't touch your other case.", 'bright_black'))
+            pause()
+            play(engine, ui)
         elif choice == "4":
             print(c('\nGoodbye, detective.', 'bright_black'))
             return

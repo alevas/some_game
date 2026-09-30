@@ -126,14 +126,25 @@ class SaveCodeTest(FeatureTest):
     def test_round_trip(self):
         self.advance()
         code = self.engine.save_code()
-        self.assertRegex(code, r"^N1(-[A-Z2-7]{1,5})+$")
+        self.assertRegex(code, rf"^N{savecode.VERSION}(-[A-Z2-7]{{1,5}})+$")
         other = GameEngine(Path(tempfile.mkdtemp(dir=self.save_dir)))
         other.load_code(code)
         self.assertEqual(asdict(other.state), asdict(self.engine.state))
         self.assertTrue(other.load_game(0), "a loaded code becomes the case in progress")
 
     def test_fresh_case_code_is_short(self):
-        self.assertLess(len(self.engine.save_code()), 30)
+        # A fresh case still holds its random pick of riddles, one number per place
+        self.assertLess(len(self.engine.save_code()), 100)
+
+    def test_version_1_codes_still_load(self):
+        data = asdict(self.engine.state)
+        data["score"] = 55
+        del data["selection"], data["daily"], data["replay"], data["showdown_log"]  # not in version 1
+        code = savecode.encode(data, version=1)
+        self.assertTrue(code.startswith("N1-"))
+        self.engine.load_code(code)
+        self.assertEqual(self.engine.state.score, 55)
+        self.assertTrue(self.engine.state.selection, "a version 1 case gets riddles picked when it loads")
 
     def test_every_field_is_included(self):
         data = savecode.decode(self.engine.save_code())
@@ -151,11 +162,10 @@ class SaveCodeTest(FeatureTest):
             code.replace("-", " "),
             "\n".join(savecode.lines(code, groups=3)),
             prefix + body.replace("O", "0").replace("I", "1").replace("B", "8"),
-            "nl" + body,
             "  " + code.replace("-", "") + "  ",
-        ]
+        ] + (["nl" + body] if prefix == "N1" else [])
         for text in sloppy:
-            self.assertEqual(savecode.decode(text), asdict(self.engine.state), text)
+            self.assertEqual(savecode.decode(text), savecode.decode(code), text)
 
     def assertRejected(self, code, fragment):
         with self.assertRaises(SaveCodeError) as caught:
@@ -171,7 +181,7 @@ class SaveCodeTest(FeatureTest):
         swapped = "A" if code[i] != "A" else "B"
         self.assertRejected("", "Type or paste")
         self.assertRejected("hello detective", "isn't a save code")
-        self.assertRejected("N2" + code[2:], "different version")
+        self.assertRejected("N9" + code[2:], "different version")
         self.assertRejected("N0-ABCDE", "different version")
         self.assertRejected(code[:i] + "9" + code[i + 1:], "never contain 9")
         self.assertRejected(code[:i] + swapped + code[i + 1:], "doesn't check out")
@@ -237,8 +247,9 @@ class AchievementTest(FeatureTest):
         self.play_through()
         self.win_showdown()
         got = self.unlocked()
+        # Bookworm (half the notebook) needs more than one case now that the pool is bigger
         for aid in ["sherlock", "clean_sweep", "bare_hands", "grimm_reaper", "hot_streak", "polyglot",
-                    "bookworm", "rookie_win", "detective_win"]:
+                    "rookie_win", "detective_win"]:
             self.assertIn(aid, got)
         self.assertNotIn("noir_win", got)
         self.assertNotIn("close_shave", got)

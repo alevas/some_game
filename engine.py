@@ -14,19 +14,40 @@ hint, or throw it at Volkov in the final showdown to dodge a question.
 Characters can be questioned too (data/interrogations.toml). Some of their answers
 are lies, and the right evidence breaks them; how that goes decides how far they
 trust you.
+
+Each case asks a random handful of every location's riddles. The daily case is a
+shorter one, picked from the UTC date, so everyone gets the same riddles that day.
+
+The riddles and the story live in data/riddles.toml and data/story.toml, so they
+can be edited without touching the code. They are checked when the game starts.
 """
 
+import difflib
+import hashlib
 import json
+import math
 import random
 import re
 import sys
-import tomllib
+import textwrap
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from typing import Callable, List, Optional, Dict, Tuple
 
 import savecode
 from savecode import SaveCodeError
+
+try:
+    import tomllib
+except ImportError:  # Python older than 3.11
+    try:
+        import tomli as tomllib
+    except ImportError:
+        raise SystemExit("Noir Language Riddles needs Python 3.11 or newer "
+                         "(or, on an older Python: pip install tomli).") from None
+
+import art
 
 
 # =============================================================================
@@ -50,14 +71,19 @@ class Riddle:
     # "choice": pick one of the options
     # "type":   type the word (answer plus any `accepted` spellings)
     # "match":  pair each left-hand word with its right-hand partner; answer is the partners joined by "|"
+    # "order":  put the shuffled `sequence` back in order; answer is the sequence joined by "|"
     kind: str = "choice"
     accepted: List[str] = field(default_factory=list)
     pairs: List[Tuple[str, str]] = field(default_factory=list)
     item_help: Optional[Tuple[str, str]] = None  # (evidence, extra help shown while you hold it)
+    sequence: List[str] = field(default_factory=list)  # an order riddle's steps, first to last
+    diagram: str = ""  # ASCII art shown above a choice riddle's options, e.g. a family tree with a ??? gap
 
     def display_answer(self) -> str:
         if self.kind == "match":
             return ", ".join(f"{left} = {right}" for left, right in self.pairs)
+        if self.kind == "order":
+            return " → ".join(self.sequence)
         return self.answer
 
 
@@ -68,7 +94,7 @@ class Location:
     description: str
     character: str
     greeting: str           # what the character says while you investigate
-    riddle_ids: List[int]   # asked in this order
+    riddle_ids: List[int]   # the pool: every riddle placed here but the lead, in the order they are asked
     lead_riddle: Optional[int] = None
     leads_to: Optional[str] = None
     lead_after: int = 0     # riddles to solve here before the lead appears
@@ -78,351 +104,472 @@ class Location:
     good_lines: List[str] = field(default_factory=list)  # reactions to a clean answer
     bad_lines: List[str] = field(default_factory=list)   # reactions to a slip
     present: Dict[str, str] = field(default_factory=dict)  # evidence shown -> what the character reveals
+    riddles_per_case: int = 0        # how many of the pool a case asks (picked at random)
+    riddles_per_daily_case: int = 0  # the same for the shorter daily case
 
 
-RIDDLES = [
-    Riddle(1, "Greek", "location", "In Greek, it is βιβλίο (vivlio). Where would you go to borrow one?",
-           "βιβλίο", "Library", ["University", "Bookstore"],
-           "Think where books are collected and borrowed.",
-           "Greek βιβλίο = book; a library is a βιβλιοθήκη ('book case'). English 'library' took the Latin route: liber (book) → librarium.", "Case File", 1,
-           decoys=['Post office', 'Museum']),
+# =============================================================================
+# LOADING THE DATA FILES
+# =============================================================================
 
-    Riddle(2, "German", "location", "In German, linguists met where Kaffee flows. Where?",
-           "Linguisten trafen sich, wo Kaffee fließt", "Café Mozart",
-           ["The university", "A beer hall"], "Not a pub. Somewhere with coffee.",
-           "Kaffee = coffee. Berlin intellectuals met in cafes.", "Sugar Packet", 1,
-           decoys=['A bakery', 'The train station']),
+# Next to this file, or inside the bundle when frozen with PyInstaller (--add-data "data:data")
+DATA_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "data"
 
-    Riddle(3, "Spanish", "etymology", "This word is libro in Spanish, livre in French, Buch in German. What is it in English?",
-           "libro | livre | Buch", "Book", ["Library", "Novel"],
-           "All three words mean the same thing.",
-           "Libro and livre come from Latin liber (originally 'inner bark'). Buch is Germanic, a sibling of English 'book'.", "Spanish Dictionary", 1,
-           decoys=['Letter', 'Page']),
 
-    Riddle(4, "Russian", "cognates", "Russian новый (novyi), Latin novus, Greek νέος (neos). What is it in English?",
-           "новый | novus | νέος", "New", ["Noon", "Nine"],
-           "The opposite of old.",
-           "All from PIE *néwos. 'Nine' looks close but comes from a different root, *h₁néwn̥.", "Cipher Wheel", 2,
-           decoys=['Now', 'Near']),
+class DataError(ValueError):
+    """A mistake in one of the data files, described so that a person can fix it"""
 
-    Riddle(5, "Arvanitika", "false friends", "In Arvanitika, it is buke. In Greek, it is ψωμί. What is it in English?",
-           "buke | ψωμί", "Bread", ["Book", "Brick"], "It is a staple food.",
-           "Arvanitika buke and Greek ψωμί both mean bread. It only looks like 'book'.", "Arvanitika Notes", 2,
-           decoys=['Cheese', 'Water']),
 
-    Riddle(6, "Greek", "etymology", "In Greek, it is πατήρ (pater). In German, it is Vater. What is it in English?",
-           "πατήρ | Vater", "Father", ["Mother", "Brother"], "PIE root: *ph₂tḗr",
-           "All descend from Proto-Indo-European *ph₂tḗr. Germanic turned p into f/v.", None, 1,
-           decoys=['Uncle', 'Pastor']),
+def read_toml(name: str) -> dict:
+    """Parse data/<name>. Syntax errors come back with the line and column."""
+    path = DATA_DIR / name
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except OSError as e:
+        raise DataError(f"data/{name}: cannot open {path} ({e.strerror})") from None
+    except tomllib.TOMLDecodeError as e:
+        raise DataError(f"data/{name}: {e}") from None
 
-    Riddle(7, "German", "false friends", "In German, Gift does not mean a present. What does it mean?",
-           "Gift", "Poison", ["Gift", "Present"], "In English, gift is positive.",
-           "German Gift once meant 'something given', a dose, and narrowed to 'poison'. English kept the original sense.", None, 1,
-           decoys=['Money', 'Luck']),
 
-    Riddle(8, "German", "cognates", "It is Mutter in German, μητέρα (mitera) in Greek, mater in Latin. What is it in English?",
-           "Mutter | μητέρα | mater", "Mother", ["Sister", "Aunt"], "PIE root: *méh₂tēr",
-           "All from PIE *méh₂tēr. Preserved across 4000+ years.", "Family Tree", 1,
-           decoys=['Daughter', 'Wife']),
+def join_lines(text: str) -> str:
+    """Text written over several lines inside triple quotes becomes one line again"""
+    if "\n" not in text:
+        return text
+    return " ".join(line.strip() for line in text.splitlines() if line.strip())
 
-    Riddle(9, "Spanish", "etymology", "This word is noche in Spanish. In Latin it was nox. What is it in English?",
-           "noche | nox", "Night", ["Noon", "Noxious"], "It is the opposite of day.",
-           "Latin nox, noctis and English night are cognates from PIE *nókʷts. 'Noxious' comes from noxa (harm).", None, 1,
-           decoys=['Nook', 'Nose']),
 
-    Riddle(10, "Russian", "etymology", "This Russian word is водка (vodka). From вода (voda) meaning water. What is the connection?",
-           "водка | вода", "Little water", ["Fire water", "Strong drink"], "Vodka is a diminutive.",
-           "Vodka is the diminutive of вода (water).", "Vodka Bottle", 2,
-           decoys=['Grain spirit', 'Holy water']),
+_REQUIRED = object()
 
-    # New 20 riddles
-    Riddle(11, "Latin", "etymology", "This Latin word 'lux' (genitive lucis) means light. What English word derives from it?",
-           "lux", "Lucid", ["Luxury", "Luck"], "Think of a clear, bright mind.",
-           "Lux, lucis → lucid, elucidate, translucent. 'Luxury' is a trap: it comes from luxus (excess).", "Lantern", 2,
-           decoys=['Lust', 'Lush']),
 
-    Riddle(12, "French", "etymology", "In French, 'histoire' means both history and story. What everyday English word shares its root?",
-           "histoire", "Story", ["Histogram", "Hysteria"], "From Latin historia.",
-           "Story is a clipped form of Old French estoire, from Latin historia. Histogram (histos, 'mast') and hysteria (hystera, 'womb') only look similar.", "History Book", 2,
-           decoys=['Mystery', 'Stair']),
+class Fields:
+    """Reads the fields of one entry in a data file, failing with a message that names the entry"""
 
-    Riddle(13, "Greek", "etymology", "This Greek word φως (phos) means light. What English prefix means light?",
-           "φως (phos)", "Photo-", ["Phono-", "Philo-"], "As in photography.",
-           "From Greek φῶς, φωτός (phos, photos) = light. Phono- is sound, philo- is love.", "Photograph", 1,
-           decoys=['Phyto-', 'Phylo-']),
+    def __init__(self, table, where: str):
+        if not isinstance(table, dict):
+            raise DataError(f"{where}: should be a table of fields")
+        self.table, self.where, self.seen = table, where, set()
 
-    Riddle(14, "Sanskrit", "etymology", "The Sanskrit word 'danta' means tooth. What English word is related?",
-           "danta", "Dental", ["Dandy", "Dance"], "Think of your dentist.",
-           "Sanskrit दन्त (danta) and Latin dens, dentis (→ dental) share PIE *h₃dónts, which also became English 'tooth'.", "Dental Mirror", 2,
-           decoys=['Denim', 'Dainty']),
+    def fail(self, message: str):
+        raise DataError(f"{self.where}: {message}")
 
-    Riddle(15, "Old Norse", "borrowings", "Old Norse 'skyrta' meant shirt. English kept its native 'shirt', but borrowed the Norse word too. As what?",
-           "skyrta", "Skirt", ["Short", "Scarf"], "Vikings kept the hard 'sk' sound.",
-           "Shirt (Old English scyrte) and skirt (Old Norse skyrta) are the same word. The Vikings left English doublets like this.", "Viking Brooch", 1,
-           decoys=['Shawl', 'Scarlet']),
+    def get(self, key: str, default=_REQUIRED):
+        self.seen.add(key)
+        if key in self.table:
+            return self.table[key]
+        if default is _REQUIRED:
+            typo = difflib.get_close_matches(key, [k for k in self.table if k not in self.seen], n=1, cutoff=0.8)
+            self.fail(f"missing field '{key}'" + (f" (is '{typo[0]}' a typo?)" if typo else ""))
+        return default
 
-    Riddle(16, "Arabic", "borrowings", "This Arabic word 'sukkar' means sugar. Through which language did it reach English?",
-           "sukkar", "Old French", ["Persian", "Greek"], "It came to England via the Mediterranean and the Normans' language.",
-           "Sanskrit śarkarā → Persian shakar → Arabic sukkar → Medieval Latin succarum / Old French sucre → English sugar.", "Sugar Cube", 2,
-           decoys=['Dutch', 'Old Norse']),
+    def text(self, key: str, default=_REQUIRED, keep_lines: bool = False) -> Optional[str]:
+        if key not in self.table and default is not _REQUIRED:
+            return self.get(key, default)
+        value = self.get(key)
+        if not isinstance(value, str):
+            self.fail(f"'{key}' should be text in quotes, not {value!r}")
+        if not value.strip():
+            self.fail(f"'{key}' is empty")
+        return value if keep_lines else join_lines(value)
 
-    Riddle(17, "Hebrew", "etymology", "The Hebrew word 'shalom' means peace. What does its root literally mean?",
-           "שלום", "Wholeness", ["Hello", "Victory"], "Root means completeness.",
-           "Peace as wholeness, not just absence of conflict.", "Peace Symbol", 2,
-           decoys=['Silence', 'Surrender']),
+    def number(self, key: str, default=_REQUIRED, low: int = 0, high: Optional[int] = None) -> int:
+        value = self.get(key, default)
+        if not isinstance(value, int) or isinstance(value, bool):
+            self.fail(f"'{key}' should be a whole number, not {value!r}")
+        if value < low or (high is not None and value > high):
+            limits = f"between {low} and {high}" if high is not None else f"at least {low}"
+            self.fail(f"'{key}' should be {limits}, not {value}")
+        return value
 
-    Riddle(18, "Japanese", "borrowings", "The Japanese word 'pan' (パン) for bread comes from which language?",
-           "パン", "Portuguese", ["Chinese", "English", "French"], "From Portuguese pão.",
-           "Portuguese traders brought bread to Japan in the 16th century.", "Portuguese Bread", 1,
-           decoys=['Dutch', 'Korean']),
+    def texts(self, key: str, default=_REQUIRED) -> List[str]:
+        if key not in self.table and default is not _REQUIRED:
+            return self.get(key, default)
+        value = self.get(key)
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            self.fail(f"'{key}' should be a list of texts in quotes, like [\"one\", \"two\"]")
+        return [join_lines(v) for v in value]
 
-    Riddle(19, "Finnish", "etymology", "Finnish 'kala' means fish. It's unrelated to most European words. Why?",
-           "kala", "Uralic language", ["Indo-European", "Slavic", "Germanic"], "Finnish is not Indo-European.",
-           "Finnish belongs to the Uralic family. Its cousin is Hungarian hal (fish), not English or German.", "Language Map", 2,
-           decoys=['Celtic', 'Baltic']),
+    def tables(self, key: str) -> List[dict]:
+        """An array of tables, written [[entry.key]] in the file"""
+        value = self.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, dict) for v in value):
+            self.fail(f"'{key}' should be written as [[...{key}]] sections")
+        return value
 
-    Riddle(20, "Egyptian", "etymology", "Ancient Egyptians called the Nile 'iteru', simply 'the river'. From which language does the name 'Nile' come?",
-           "iteru", "Greek", ["Egyptian", "Arabic"], "Herodotus wrote about it.",
-           "'Nile' comes from Greek Νεῖλος (Neilos), of uncertain origin. The Egyptians just said iteru.", "Papyrus Scroll", 3,
-           decoys=['Coptic', 'Hebrew']),
+    def finish(self):
+        """Anything left over is a misspelt or misplaced field"""
+        unknown = [key for key in self.table if key not in self.seen]
+        if unknown:
+            self.fail(f"unknown field '{unknown[0]}' (a typo?)")
 
-    Riddle(21, "Greek", "cognates", "Greek ὕδωρ (hydor) means water. Which of these words does NOT contain this root?",
-           "ὕδωρ", "Hybrid", ["Hydrogen", "Dehydrated"], "Two of these are wet.",
-           "Hydrogen ('water-maker') and dehydrated contain hydor. Hybrid comes from Latin hybrida, 'mongrel'.", None, 1,
-           decoys=['Hydrant', 'Hydraulic']),
 
-    Riddle(22, "German", "etymology", "German 'Buchstabe' means letter (of alphabet). What does it literally mean?",
-           "Buchstabe", "Beech stick", ["Book letter", "Letter book"], "Buche = beech, Stab = staff/stick.",
-           "Early Germanic runes were carved on beech staves. Buch and English 'book' are probably named after the beech too.", "Quill Pen", 2,
-           decoys=['Oak tablet', 'Stamp mark']),
+def entries(doc: dict, key: str, filename: str) -> List[dict]:
+    value = doc.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(v, dict) for v in value):
+        raise DataError(f"{filename}: '{key}' entries should be written as [[{key}]] sections")
+    return value
 
-    Riddle(23, "Spanish", "false friends", "In Spanish, 'embarazada' does NOT mean embarrassed. What does it mean?",
-           "embarazada", "Pregnant", ["Embarrassed", "Sad", "Happy"], "Classic false friend!",
-           "Embarazada = pregnant. 'Avergonzada' = embarrassed.", None, 1,
-           decoys=['Married', 'Engaged']),
 
-    Riddle(24, "Russian", "etymology", "Russian 'spasibo' (thank you) comes from what religious phrase?",
-           "spasibo", "God save", ["Save me", "Thank God", "Spas"], "Spasi Bog = God save (you).",
-           "From Old Church Slavonic 'spasi bog' = God save (you).", "Religious Text", 2,
-           decoys=['Bless you', 'Holy Russia']),
+def check_known_sections(doc: dict, known: Tuple[str, ...], expected: str, filename: str):
+    for key in doc:
+        if key not in known:
+            raise DataError(f"{filename}: unknown section or field '{key}' (expected {expected})")
 
-    Riddle(25, "Greek", "etymology", "Greek 'astron' (ἄστρον) means star. Which word hides this root?",
-           "ἄστρον", "Disaster", ["Easter", "Master"], "Blame bad luck on the stars.",
-           "Disaster = Italian disastro, 'ill-starred'. Easter is from a Germanic dawn goddess; master from Latin magister.", None, 1,
-           decoys=['Plaster', 'Monster']),
 
-    Riddle(26, "Latin", "etymology", "Latin 'specere' means to look. Which of inspect, respect and spectacle come from it?",
-           "specere", "All of these", ["Only inspect", "Only spectacle", "None of these"], "Think of words with 'spect'.",
-           "Specere → inspect, respect, suspect, specimen, spectacle, perspective, etc.", "Magnifying Glass", 2,
-           decoys=['Only respect', 'Only inspect and respect']),
-
-    Riddle(27, "French", "false friends", "In French, 'actuellement' does NOT mean 'actually'. What does it mean?",
-           "actuellement", "Currently", ["Actually", "Accurately", "Finally"], "Think time, not truth.",
-           "Actuellement = currently, at the moment. For 'actually', French says 'en fait'.", None, 2,
-           decoys=['Eventually', 'Seriously']),
-
-    Riddle(28, "Arvanitika", "cognates", "Albanian 'motër' means sister, and Arvanitika inherited it. Which English word shares its PIE root?",
-           "motër", "Mother", ["Sister", "Brother"], "The meaning shifted inside the family.",
-           "Albanian motër comes from PIE *méh₂tēr, 'mother'. Along the way it came to mean 'sister'.", None, 2,
-           decoys=['Motor', 'Other']),
-
-    Riddle(29, "PIE", "etymology", "PIE root *tréyes means three. Which English / Greek / Latin set comes from it?",
-           "*tréyes", "Three / τρία / tres", ["Two / δύο / duo", "Tree / δένδρο / arbor"], "Direct cognates.",
-           "English three, Greek τρία (tria), Latin tres, all from PIE *tréyes.", None, 2,
-           decoys=['Thirst / δίψα / sitis', 'Throne / θρόνος / thronus']),
-
-    Riddle(30, "Hindi", "etymology", "The Hindi word 'namaste' combines 'namas' (bow) and what?",
-           "namaste", "To you", ["Hello", "Goodbye", "Peace"], "Namah = bow, te = to you.",
-           "From Sanskrit namas (bow/reverence) + te (to you).", "Namaste Symbol", 2,
-           decoys=['Thank you', 'Welcome']),
-
-    # Sound shifts: type the English cognate by applying Grimm's law
-    Riddle(31, "Latin", "sound shift",
-           "Latin 'pes, pedis' names a body part. Apply Grimm's law (p → f, d → t) to find its English cousin.",
-           "pes, pedis   (p → f, d → t)", "foot", [], "You stand on two of them.",
-           "Latin pes, pedis and English foot are cognates: Germanic shifted p to f and d to t (Grimm's law). "
-           "Pedal and pedestrian are later loans from the Latin.", None, 2, kind="type", accepted=["feet"]),
-
-    Riddle(32, "Latin", "sound shift",
-           "Latin 'tu' means 'you' (one person). Grimm's law turned t into th. What is the old English word, still heard in prayers?",
-           "tu   (t → th)", "thou", [], "'___ shalt not...'",
-           "Latin tu and English thou are cognates; t → th is Grimm's law. German kept du.",
-           None, 2, kind="type", accepted=["thee"]),
-
-    Riddle(33, "Latin", "sound shift",
-           "Latin 'centum' (said 'kentum') means a number. Grimm's law shifted k to h and t to d. What is it in English?",
-           "centum   (k → h, t → d)", "hundred", [], "Ten times ten.",
-           "Latin centum and English hundred share PIE *ḱm̥tóm: k → h and t → d are Grimm's law. "
-           "The -red was added later, from an old word for 'count'.", "Parish Ledger", 3, kind="type"),
-
-    Riddle(34, "Latin", "sound shift",
-           "Latin 'genu' is a body part. Grimm's law turned g into k. What is it in English? (The k is silent now.)",
-           "genu   (g → k)", "knee", [], "It bends when you kneel.",
-           "Latin genu and English knee are cognates: g → k is Grimm's law. "
-           "The k in 'knee' was pronounced until the 1600s.", None, 2, kind="type", accepted=["knees"]),
-
-    # Odd one out
-    Riddle(35, "Arabic", "odd one out", "Which of these is NOT a loanword from Arabic?",
-           "Arabic loanwords in English", "Tea", ["Algebra", "Alcohol", "Coffee"],
-           "One of these came from China, by sea.",
-           "Algebra (al-jabr), alcohol (al-kuḥl), coffee (qahwa), zero (ṣifr) and sofa (ṣuffa) are Arabic. "
-           "Tea comes from Chinese (Min dialect 'te'), brought by Dutch traders.", None, 2,
-           decoys=["Zero", "Sofa"]),
-
-    Riddle(38, "French", "odd one out",
-           "After 1066, Norman French gave English its words for meat. Which of these is NOT from French?",
-           "Norman French, 1066", "Sheep", ["Beef", "Pork", "Mutton"],
-           "Saxon farmers raised the animals; Norman lords ate the meat.",
-           "Beef (boeuf), pork (porc), mutton (mouton), veal and venison came with the Normans. "
-           "Sheep, cow and swine stayed Old English: the animal in the field, the French word on the plate.",
-           "Norman Menu", 2, decoys=["Veal", "Venison"]),
-
-    # Match the pairs
-    Riddle(36, "German", "false friends", "Match each German false friend to what it really means.",
-           "Rat · bekommen · Chef", "advice|to receive|boss", [],
-           "A German 'Chef' runs the office, not the kitchen.",
-           "Rat = advice (not a rodent), bekommen = to receive (not 'become'), Chef = boss (not a cook).",
-           "Waiter's Notepad", 2, kind="match",
-           pairs=[("Rat", "advice"), ("bekommen", "to receive"), ("Chef", "boss")]),
-
-    Riddle(37, "Greek", "cognates", "Match each Greek word to the English word built from it.",
-           "θεός · πῦρ · χρόνος", "theology|pyromaniac|chronicle", [], "πῦρ is fire.",
-           "θεός (theos) = god → theology; πῦρ (pyr) = fire → pyromaniac; χρόνος (chronos) = time → chronicle.",
-           None, 2, kind="match",
-           pairs=[("θεός (theos)", "theology"), ("πῦρ (pyr)", "pyromaniac"), ("χρόνος (chronos)", "chronicle")]),
-
-    # Elena's cipher: easier if you kept the Cipher Wheel
-    Riddle(39, "Cipher", "cipher", "Hidden in Volkov's files, a scrap of paper in Elena's hand. Decode it.",
-           "F U B S W", "crypt", [], "Each letter was moved the same number of places along the alphabet.",
-           "A Caesar cipher: every letter shifted three places forward. Elena was telling you where she is.",
-           None, 3, kind="type", item_help=("Cipher Wheel", "Your Cipher Wheel is set to 3: move each letter back three places.")),
-]
-
-# The final showdown: Volkov picks three of these. They don't count toward the 39.
-VOLKOV_RIDDLES = [
-    Riddle(101, "Latin", "sound shift", "'Latin dens, dentis,' Volkov says. 'Grimm's law: d → t. The English word, detective?'",
-           "dens, dentis   (d → t)", "tooth", [], "",
-           "Dens, dentis and tooth share PIE *h₃dónts; d → t is Grimm's law, and English lost the n (compare German Zahn).",
-           kind="type", accepted=["teeth"]),
-    Riddle(102, "English", "family", "'Which living language is English's closest relative?'",
-           "West Germanic", "Frisian", ["German", "Danish", "Icelandic"], "",
-           "Frisian, spoken on the North Sea coast. 'Bread, butter and green cheese is good English and good Fries.'",
-           decoys=["Welsh", "Latin"]),
-    Riddle(103, "Sanskrit", "cognates", "'Match my Sanskrit to your English.'",
-           "pitṛ · bhrātṛ · dva", "father|brother|two", [], "",
-           "Sanskrit pitṛ, bhrātṛ and dva, English father, brother and two: all Proto-Indo-European.",
-           kind="match", pairs=[("पितृ (pitṛ)", "father"), ("भ्रातृ (bhrātṛ)", "brother"), ("द्व (dva)", "two")]),
-    Riddle(104, "Akkadian", "etymology", "Volkov smiles. 'Babel. In Akkadian, Bāb-ili meant what?'",
-           "Bāb-ili", "Gate of God", ["Confusion", "Tower of Heaven", "City of Tongues"], "",
-           "Akkadian bāb-ili = gate of god. The Bible ties Babel to Hebrew bālal, 'to confuse': a pun, not the origin.",
-           decoys=["House of Kings", "River Gate"]),
-]
-ALL_RIDDLES = {r.id: r for r in RIDDLES + VOLKOV_RIDDLES}
-SHOWDOWN_ROUNDS = 3
-SHOWDOWN_INTRO = ("Volkov steps out from between the cabinets. "
-                  "\"Words are my weapons, detective. Let us see yours.\"")
-
-LOCATIONS: Dict[str, Location] = {
-    "ClientOffice": Location(
-        "ClientOffice", "Weber's Office",
-        "Berlin, 1947. Rain on the window, a desk lamp, a silent typewriter. "
-        "Elena Weber, a linguist, has disappeared. Her brother found a note in Greek on her desk.",
-        "Klaus Weber",
-        "She said if anything happened to her, I should give this to a detective. It's all in Greek.",
-        riddle_ids=[], lead_riddle=1, leads_to="Library", lead_after=0,
-        lead_text="The note is a call slip from the Staatsbibliothek. Elena's handwriting, dated the day she vanished.",
-        done_text="Please. Find her.",
-        beats=[(1, "She walked along the Spree every night. Said the water helped her think.")],
-        good_lines=["You really can read it!", "Elena said you were good."],
-        bad_lines=["Are you sure you know Greek?", "Please, take your time. For her sake."],
-        present={'Photograph': "That's Elena outside St. Nicholas, before the war. She loved that church. Said its crypt was older than Berlin itself."},
-    ),
-    "Library": Location(
-        "Library", "Staatsbibliothek",
-        "Tall shelves stretch into shadow. Manuscripts in Greek, German, Latin. "
-        "The air smells of parchment and secrets. A librarian eyes you suspiciously.",
-        "Herr Schmidt",
-        "She was here last week. Asking about Proto-Indo-European again. Always the old roots.",
-        riddle_ids=[3, 9, 31, 11, 13, 20, 35, 21, 26, 29], lead_riddle=2, leads_to="Cafe", lead_after=3,
-        lead_text="Tucked in Elena's last book: a napkin from Café Mozart, with a table number and a time.",
-        done_text="You've read more than most of my students, detective.",
-        beats=[
-            (2, "She kept requesting the 1690 plans of St. Nicholas. Not the nave. The parts below ground."),
-            (5, "The men who came after her asked for the same plans. I told them they were lost. They were not."),
-            (8, "Elena told me once: the oldest words are always buried deepest."),
-        ],
-        good_lines=["Hm. Not bad, for a policeman.", "Correct. Elena would approve."],
-        bad_lines=["Tsk. Look it up, detective.", "My first-year students know that one."],
-        present={'Case File': "Her last call slip: the St. Nicholas plans. Stamped 'returned'. They were never returned."},
-    ),
-    "Cafe": Location(
-        "Cafe", "Café Mozart",
-        "Strong coffee and sugar hang in the air. Intellectuals and spies "
-        "share tables in the dim light. A waiter polishes a glass, watching.",
-        "Karl",
-        "The men in dark suits come in every Tuesday. Always order the same thing.",
-        riddle_ids=[5, 7, 32, 10, 16, 36, 18, 27], lead_riddle=24, leads_to="Church", lead_after=3,
-        lead_text="Karl leans in: the men in suits always leave for St. Nicholas when the bells ring. They cross themselves on the way out.",
-        done_text="No more gossip, detective. Just coffee.",
-        beats=[
-            (2, "The suits take bread and soup to go. Every day. Nobody takes soup to go."),
-            (4, "They carry it across the square, toward the church, still steaming."),
-            (6, "Our cellar? Only beer and rats down there. Go look, if you like. I did."),
-        ],
-        good_lines=["Sharp. Like the coffee.", "Careful being that clever in here."],
-        bad_lines=["Maybe stick to the coffee, detective.", "The suits are laughing at you."],
-        present={'Sugar Packet': "From table six, the suits' table. They always take extra sugar. 'For the lady,' they say."},
-    ),
-    "Church": Location(
-        "Church", "St. Nicholas Church",
-        "Candlelight flickers against stone walls. The sacristan moves silently between shadows. "
-        "Old texts in Greek and Latin line the shelves. The Babel Society has left its mark here.",
-        "Father Thomas",
-        "The church has secrets, detective. Some older than the building itself.",
-        riddle_ids=[6, 8, 33, 17, 37, 23, 28], lead_riddle=12, leads_to="Archive", lead_after=2,
-        lead_text="Father Thomas unlocks the parish register. Every Babel Society meeting is noted, and every entry points to a basement archive near the Spree.",
-        done_text="Go with God. And be careful down there.",
-        beats=[
-            (2, "The crypt has been sealed since the bombing in '44. No one goes down there."),
-            (4, "Though the sacristan swears he hears a woman singing beneath the altar at night. Greek hymns."),
-            (6, "Forgive me. I lied. They made me give them the crypt key."),
-        ],
-        good_lines=["The Lord gave you a good ear.", "Yes... that is right."],
-        bad_lines=["Pride comes before the fall, my son.", "Slowly. The old words do not hurry."],
-        present={'Arvanitika Notes': "Arvanitika... the sacristan's grandmother spoke it. He says the songs beneath the altar sound like this."},
-    ),
-    "Archive": Location(
-        "Archive", "Secret Archive",
-        "Files upon files of linguistic research. The Babel Society's true work is here. "
-        "Volkov, their leader, has been one step ahead. But you're closing in.",
-        "Igor Volkov",
-        "You're too late. The work is already done.",
-        riddle_ids=[4, 14, 34, 15, 19, 39, 22, 38, 25, 30],
-        done_text="Every word traced to its root. Impressive. Now what, detective?",
-        beats=[
-            (2, "You think I would keep her here, among my papers? I am not sentimental."),
-            (4, "The river? How romantic. No. Water ruins paper, and she is writing for me."),
-            (6, "She is closer to God than you are, detective. And deeper."),
-        ],
-        good_lines=["...Lucky guess.", "So. You have done your reading."],
-        bad_lines=["Ha! Elena would be ashamed of you.", "Every mistake brings my men closer, detective."],
-        present={'Religious Text': 'A hymnal? Put it away. I hear enough hymns from below as it is.'},
-    ),
+# Fields that only some kinds of riddle have
+KIND_FIELDS = {
+    "choice": {"answer", "wrong_answers", "decoys", "diagram"},
+    "type": {"answer", "accepted"},
+    "match": {"pairs"},
+    "order": {"sequence"},
 }
 
-STORY_ORDER = ["ClientOffice", "Library", "Cafe", "Church", "Archive"]
+DIAGRAM_WIDTH = 56  # fits the riddle panel of the full-screen version at its smallest (100 columns)
+
+
+def clean_diagram(text: str, f: "Fields") -> str:
+    """Keep a diagram's layout, minus blank lines around it, trailing spaces and common indentation"""
+    if "\t" in text:
+        f.fail("the diagram contains a tab; use spaces so the lines stay aligned")
+    lines = [line.rstrip() for line in textwrap.dedent(text).split("\n")]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    if not lines:
+        f.fail("'diagram' is empty")
+    if max(len(line) for line in lines) > DIAGRAM_WIDTH:
+        f.fail(f"the diagram is wider than {DIAGRAM_WIDTH} characters, so it would not fit on screen")
+    return "\n".join(lines)
+
+
+def build_riddle(table: dict, number: int, filename: str, story: bool) -> Tuple[Riddle, Optional[str]]:
+    """One [[riddle]] or [[volkov_riddle]] table. Returns the riddle and its location id."""
+    label = "riddle" if story else "volkov_riddle"
+    rid = table.get("id") if isinstance(table, dict) else None
+    where = (f"{filename}, {label} {rid}" if isinstance(rid, int)
+             else f"{filename}, {label} number {number} in the file")
+    f = Fields(table, where)
+    rid = f.number("id", low=1)
+    location = f.text("location") if story else None
+
+    kind = f.text("kind", "choice")
+    if kind not in KIND_FIELDS:
+        f.fail(f"kind should be one of {', '.join(KIND_FIELDS)}, not '{kind}'")
+    for key in set().union(*KIND_FIELDS.values()) - KIND_FIELDS[kind]:
+        if key in table:
+            f.fail(f"'{key}' does not belong in a {kind} riddle")
+
+    r = Riddle(
+        id=rid, language=f.text("language"), category=f.text("category"),
+        text=f.text("text"), clue=f.text("clue"), answer="", wrong_answers=[],
+        hint=f.text("hint") if story else f.text("hint", ""),
+        explanation=f.text("explanation"), item=f.text("item", None),
+        difficulty=f.number("difficulty", 1, low=1, high=3), kind=kind,
+    )
+
+    if kind == "choice":
+        r.answer = f.text("answer")
+        r.wrong_answers = f.texts("wrong_answers")
+        r.decoys = f.texts("decoys")
+        if not 1 <= len(r.wrong_answers) <= 3:
+            f.fail("needs 1 to 3 wrong_answers (the answer and the wrong answers are shown together, "
+                   "and there are only 4 number keys)")
+        if len(r.decoys) != 2:
+            f.fail(f"needs exactly 2 decoys (they replace wrong picks), not {len(r.decoys)}")
+        seen = {r.answer.casefold()}
+        for option in r.wrong_answers + r.decoys:
+            if option.casefold() == r.answer.casefold():
+                f.fail(f"the answer '{r.answer}' is also listed among its wrong_answers or decoys")
+            if option.casefold() in seen:
+                f.fail(f"'{option}' is listed twice among its wrong_answers and decoys")
+            seen.add(option.casefold())
+        if "diagram" in table:
+            r.diagram = clean_diagram(f.text("diagram", keep_lines=True), f)
+    elif kind == "type":
+        r.answer = f.text("answer")
+        r.accepted = f.texts("accepted", [])
+        for spelling in [r.answer] + r.accepted:
+            if not re.sub(r"[^a-z]", "", spelling.lower()):
+                f.fail(f"the typed answer '{spelling}' has no letters a-z in it, so nobody could type it")
+    elif kind == "match":
+        pairs = f.get("pairs")
+        if (not isinstance(pairs, list) or not all(isinstance(p, list) and len(p) == 2
+                                                   and all(isinstance(s, str) and s.strip() for s in p)
+                                                   for p in pairs)):
+            f.fail('\'pairs\' should be a list of ["left", "right"] pairs')
+        if not 2 <= len(pairs) <= 6:
+            f.fail(f"needs 2 to 6 pairs, not {len(pairs)}")
+        r.pairs = [(join_lines(left), join_lines(right)) for left, right in pairs]
+        for side, words in (("left", [p[0] for p in r.pairs]), ("right", [p[1] for p in r.pairs])):
+            if len({w.casefold() for w in words}) != len(words):
+                f.fail(f"two pairs have the same {side}-hand word, so the letters would be ambiguous")
+        r.answer = "|".join(right for _, right in r.pairs)
+    elif kind == "order":
+        r.sequence = f.texts("sequence")
+        if not 3 <= len(r.sequence) <= 6:
+            f.fail(f"needs 3 to 6 steps in its sequence, not {len(r.sequence)}")
+        if len({step.casefold() for step in r.sequence}) != len(r.sequence):
+            f.fail("two steps of the sequence are the same, so the order would be ambiguous")
+        r.answer = "|".join(r.sequence)
+
+    item_help = f.get("item_help", None)
+    if item_help is not None:
+        h = Fields(item_help, f"{where}, item_help")
+        r.item_help = (h.text("evidence"), h.text("text"))
+        h.finish()
+    f.finish()
+    return r, location
+
+
+def scaled(needed: int, picked: int, per_case: int) -> int:
+    """A count written for a full case (a beat's 'after', lead_after), shrunk in proportion
+    when a case picks fewer riddles at the place, so every beat can still be heard"""
+    if per_case <= 0 or picked >= per_case:
+        return needed
+    return math.ceil(needed * picked / per_case)
+
+
+def build_location(table: dict, number: int, filename: str, placed: Dict[int, str]) -> Location:
+    """One [[location]] table. `placed` maps each story riddle id to its location, in file order."""
+    lid = table.get("id") if isinstance(table, dict) else None
+    where = f"{filename}, location \"{lid}\"" if isinstance(lid, str) else f"{filename}, location number {number}"
+    f = Fields(table, where)
+    loc = Location(
+        id=f.text("id"), name=f.text("name"), description=f.text("description"),
+        character=f.text("character"), greeting=f.text("greeting"), riddle_ids=[],
+        lead_riddle=f.number("lead_riddle", low=1) if "lead_riddle" in table else None,
+        leads_to=f.text("leads_to", None), lead_after=f.number("lead_after", 0),
+        lead_text=f.text("lead_text", ""), done_text=f.text("done_text"),
+        good_lines=f.texts("good_lines"), bad_lines=f.texts("bad_lines"),
+    )
+    if not loc.good_lines or not loc.bad_lines:
+        f.fail("needs at least one line in good_lines and in bad_lines")
+    if loc.lead_riddle is None and ("leads_to" in table or "lead_text" in table or "lead_after" in table):
+        f.fail("has leads_to / lead_text / lead_after but no lead_riddle")
+    if loc.lead_riddle is not None and (not loc.leads_to or not loc.lead_text):
+        f.fail("has a lead_riddle, so it also needs leads_to and lead_text")
+
+    for n, beat in enumerate(f.tables("beat"), 1):
+        b = Fields(beat, f"{where}, beat {n}")
+        loc.beats.append((b.number("after", low=1), b.text("text")))
+        b.finish()
+    if [after for after, _ in loc.beats] != sorted({after for after, _ in loc.beats}):
+        f.fail("beats should be in order of 'after', each with a different number")
+
+    # The pool, and how much of it one case asks
+    loc.riddle_ids = [rid for rid, at in placed.items() if at == loc.id and rid != loc.lead_riddle]
+    pool = len(loc.riddle_ids)
+    loc.riddles_per_case = f.number("riddles_per_case", pool)
+    loc.riddles_per_daily_case = f.number("riddles_per_daily_case", loc.riddles_per_case)
+    if loc.riddles_per_case > pool:
+        f.fail(f"riddles_per_case is {loc.riddles_per_case}, but only {pool} riddles "
+               f"(not counting the lead) are placed here in riddles.toml")
+    if loc.riddles_per_daily_case > loc.riddles_per_case:
+        f.fail("riddles_per_daily_case should not be more than riddles_per_case")
+    if pool and not loc.riddles_per_daily_case:
+        f.fail("riddles_per_case and riddles_per_daily_case should be at least 1")
+    if loc.lead_after > loc.riddles_per_case:
+        f.fail(f"lead_after is {loc.lead_after}, but a case only asks {loc.riddles_per_case} other riddles here")
+    most = loc.riddles_per_case + (1 if loc.lead_riddle else 0)
+    for after, _ in loc.beats:
+        if after > most:
+            f.fail(f"a beat comes after {after} riddles, but a case only asks {most} here")
+    daily = [scaled(after, loc.riddles_per_daily_case, loc.riddles_per_case) for after, _ in loc.beats]
+    if len(set(daily)) != len(daily):
+        f.fail(f"with riddles_per_daily_case = {loc.riddles_per_daily_case}, two beats would come at once in "
+               f"the daily case; raise it, or space the beats further apart")
+
+    for n, shown in enumerate(f.tables("present"), 1):
+        p = Fields(shown, f"{where}, present {n}")
+        item = p.text("evidence")
+        if item in loc.present:
+            p.fail(f"the {item} is shown here twice")
+        loc.present[item] = p.text("text")
+        p.finish()
+
+    # The art has to exist for the UIs to draw this place
+    if loc.id not in art.SCENES:
+        f.fail(f"art.py has no scene for '{loc.id}' (add one to SCENES)")
+    if loc.id not in art.MAP_SPOTS:
+        f.fail(f"art.py has no spot on the Berlin map for '{loc.id}' (add one to MAP_SPOTS)")
+    if set(art.PORTRAITS.get(loc.character, {})) != {"neutral", "good", "bad"}:
+        f.fail(f"art.py has no portrait for '{loc.character}' (PORTRAITS needs neutral, good and bad)")
+    try:
+        art.berlin_map({loc.id: f"[9] {loc.name}"})
+    except IndexError:
+        f.fail(f"the name '{loc.name}' is too long to fit on the travel map")
+    f.finish()
+    return loc
+
+
+@dataclass
+class GameData:
+    riddles: List[Riddle]
+    volkov_riddles: List[Riddle]
+    locations: Dict[str, Location]  # in story order
+    elena_question: str
+    elena_options: List[str]
+    elena_answer: str
+    showdown_rounds: int
+    showdown_intro: str
+
+
+def load_game_data(riddles_doc: Optional[dict] = None, story_doc: Optional[dict] = None) -> GameData:
+    """Read and check data/riddles.toml and data/story.toml (or already parsed copies of them)"""
+    RF, SF = "data/riddles.toml", "data/story.toml"
+    riddles_doc = read_toml("riddles.toml") if riddles_doc is None else riddles_doc
+    story_doc = read_toml("story.toml") if story_doc is None else story_doc
+    check_known_sections(riddles_doc, ("riddle", "volkov_riddle"), "[[riddle]] and [[volkov_riddle]]", RF)
+    check_known_sections(story_doc, ("location", "elena", "showdown"), "[[location]], [elena] and [showdown]", SF)
+
+    # --- Riddles ---
+    story, placed = [], {}
+    for n, table in enumerate(entries(riddles_doc, "riddle", RF), 1):
+        r, where = build_riddle(table, n, RF, story=True)
+        story.append(r)
+        placed[r.id] = where
+    volkov = [build_riddle(t, n, RF, story=False)[0]
+              for n, t in enumerate(entries(riddles_doc, "volkov_riddle", RF), 1)]
+    if not story or not volkov:
+        raise DataError(f"{RF}: needs at least one [[riddle]] and one [[volkov_riddle]]")
+    ids: Dict[int, Riddle] = {}
+    items: Dict[str, int] = {}
+    for r in story + volkov:
+        if r.id in ids:
+            raise DataError(f"{RF}: two riddles have id {r.id}; every riddle needs its own number")
+        ids[r.id] = r
+        if r.item:
+            if r.item in items:
+                raise DataError(f"{RF}, riddle {r.id}: the evidence '{r.item}' is already given by riddle {items[r.item]}")
+            items[r.item] = r.id
+    for r in story + volkov:
+        if r.item_help and r.item_help[0] not in items:
+            raise DataError(f"{RF}, riddle {r.id}: item_help needs the '{r.item_help[0]}', "
+                            f"but no riddle gives that evidence")
+
+    # --- Locations ---
+    locations: Dict[str, Location] = {}
+    for n, table in enumerate(entries(story_doc, "location", SF), 1):
+        loc = build_location(table, n, SF, placed)
+        if loc.id in locations:
+            raise DataError(f"{SF}: two locations have the id \"{loc.id}\"")
+        locations[loc.id] = loc
+    if len(locations) < 2:
+        raise DataError(f"{SF}: needs at least two [[location]] sections")
+
+    for r in story:
+        if placed[r.id] not in locations:
+            raise DataError(f"{RF}, riddle {r.id}: unknown location \"{placed[r.id]}\" "
+                            f"(the locations are {', '.join(locations)})")
+    leads = {}
+    for loc in locations.values():
+        where = f"{SF}, location \"{loc.id}\""
+        if loc.lead_riddle is not None:
+            if loc.lead_riddle not in placed:
+                raise DataError(f"{where}: lead_riddle {loc.lead_riddle} is not a [[riddle]] in {RF}")
+            if placed[loc.lead_riddle] != loc.id:
+                raise DataError(f"{where}: its lead_riddle {loc.lead_riddle} is placed at "
+                                f"\"{placed[loc.lead_riddle]}\" in {RF}; it should say location = \"{loc.id}\"")
+            if loc.leads_to not in locations or loc.leads_to == loc.id:
+                raise DataError(f"{where}: leads_to \"{loc.leads_to}\" is not another location")
+            leads[loc.id] = loc.leads_to
+        for item in loc.present:
+            if item not in items:
+                raise DataError(f"{where}: shows the '{item}', but no riddle gives that evidence")
+
+    # Every place must be reachable by following leads from the first one
+    order = list(locations)
+    reached, here = [order[0]], order[0]
+    while here in leads and leads[here] not in reached:
+        here = leads[here]
+        reached.append(here)
+    for loc_id in order:
+        if loc_id not in reached:
+            raise DataError(f"{SF}: no chain of leads from \"{order[0]}\" reaches \"{loc_id}\"")
+
+    # --- The finale ---
+    elena = Fields(story_doc.get("elena", {}), f"{SF}, [elena]")
+    question, options, answer = elena.text("question"), elena.texts("options"), elena.text("answer")
+    elena.finish()
+    if answer not in options:
+        elena.fail(f"the answer \"{answer}\" is not one of the options")
+    if options[0] == answer:
+        elena.fail("the answer should not be the first option, which the menu highlights")
+    if len(set(options)) != len(options) or not 2 <= len(options) <= 9:
+        elena.fail("needs 2 to 9 different options")
+    showdown = Fields(story_doc.get("showdown", {}), f"{SF}, [showdown]")
+    rounds = showdown.number("rounds", low=1, high=len(volkov))
+    intro = showdown.text("intro")
+    showdown.finish()
+
+    return GameData(story, volkov, locations, question, options, answer, rounds, intro)
+
+
+try:
+    _DATA = load_game_data()
+except DataError as error:
+    raise SystemExit(f"Noir Language Riddles could not start, because of a mistake in the game data:\n  {error}") from None
+
+RIDDLES = _DATA.riddles
+# The final showdown: Volkov picks SHOWDOWN_ROUNDS of these. They don't count toward the case.
+VOLKOV_RIDDLES = _DATA.volkov_riddles
+ALL_RIDDLES = {r.id: r for r in RIDDLES + VOLKOV_RIDDLES}
+SHOWDOWN_ROUNDS = _DATA.showdown_rounds
+SHOWDOWN_INTRO = _DATA.showdown_intro
+
+LOCATIONS: Dict[str, Location] = _DATA.locations
+STORY_ORDER = list(LOCATIONS)  # the order of [[location]] in story.toml
 
 # The final question: where is Elena? The answer is pieced together from the beats.
-ELENA_QUESTION = "Before you face Volkov: where is Elena being held?"
-ELENA_OPTIONS = [
-    "A safe house by the Spree",
-    "The back rooms of the Archive",
-    "The crypt under St. Nicholas",
-    "The cellar of Café Mozart",
-]
-ELENA_ANSWER = "The crypt under St. Nicholas"
-START_LOCATION = "ClientOffice"
-FINAL_LOCATION = "Archive"
+ELENA_QUESTION = _DATA.elena_question
+ELENA_OPTIONS = _DATA.elena_options
+ELENA_ANSWER = _DATA.elena_answer
+START_LOCATION = STORY_ORDER[0]    # the case starts at the first location...
+FINAL_LOCATION = STORY_ORDER[-1]   # ...and ends with Volkov at the last
+
+
+def utc_today() -> str:
+    """The date the daily case goes by, the same all over the world"""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def seeded_sample(items: list, count: int, seed: str) -> list:
+    """`count` of the items, always the same ones for the same seed, on any computer or Python version"""
+    return sorted(items, key=lambda item: hashlib.sha256(f"{seed}/{item}".encode()).hexdigest())[:count]
+
+
+def story_riddles() -> set:
+    """Pool riddles whose evidence the story can't do without: what makes a character talk when
+    shown it, and at least one piece that breaks each lie. A lead's evidence always comes anyway."""
+    gives = {r.item: r.id for r in RIDDLES if r.item}
+    leads = {loc.lead_riddle for loc in LOCATIONS.values()}
+    needs = [[item] for loc in LOCATIONS.values() for item in loc.present]
+    needs += [q.evidence for talk in INTERROGATIONS.values() for q in talk.questions if q.lie]
+    required = set()
+    for items in needs:
+        ids = [gives[item] for item in items if item in gives]
+        if ids and not any(rid in leads for rid in ids):
+            required.add(ids[0])
+    return required
+
+
+def pick_riddles(seed: Optional[str] = None, daily: bool = False) -> Dict[str, List[int]]:
+    """The riddles one case asks at each place (leads not included): the ones the story needs,
+    then a handful more of the pool, at random or fixed by a seed, asked in pool order"""
+    required = story_riddles()
+    selection = {}
+    for loc in LOCATIONS.values():
+        count = loc.riddles_per_daily_case if daily else loc.riddles_per_case
+        must = [rid for rid in loc.riddle_ids if rid in required][:count]
+        rest = [rid for rid in loc.riddle_ids if rid not in must]
+        extra = max(count - len(must), 0)
+        if seed is None:
+            chosen = must + random.sample(rest, extra)
+        else:
+            chosen = must + seeded_sample(rest, extra, f"{seed}/{loc.id}")
+        selection[loc.id] = [rid for rid in loc.riddle_ids if rid in chosen]
+    return selection
 
 
 # =============================================================================
@@ -447,6 +594,10 @@ class GameState:
     asked: List[str] = field(default_factory=list)        # "character:question" put to them so far
     lies_broken: List[str] = field(default_factory=list)  # "character:question" lies you broke with evidence
     favors_used: List[str] = field(default_factory=list)  # characters whose free hint you already took
+    selection: Dict[str, List[int]] = field(default_factory=pick_riddles)  # this case's riddles at each place
+    daily: str = ""       # the UTC date ("2026-09-30") of a daily case; "" for a normal case
+    replay: bool = False  # a daily case played again after that day's result was recorded
+    showdown_log: List[str] = field(default_factory=list)  # each showdown round: clean, slip, dodge or lost
 
 
 @dataclass
@@ -633,6 +784,12 @@ DEFAULT_DIFFICULTY = "detective"
 # GAME ENGINE
 # =============================================================================
 
+AUTOSAVE = "autosave.json"              # the normal case, for Continue
+DAILY_AUTOSAVE = "daily_autosave.json"  # the daily case in progress
+DAILY_RECORDS = "daily.json"            # every finished daily case, by date
+SHOWDOWN_MARKS = {"clean": "🟩", "slip": "🟨", "dodge": "📁", "lost": "🟥"}  # for the daily result
+
+
 class GameEngine:
     """Core game logic"""
 
@@ -666,8 +823,20 @@ class GameEngine:
         return self.locations[loc_id or self.state.current_location]
 
     def riddles_at(self, loc_id: str) -> List[int]:
+        """This case's riddles at a place: its pick from the pool, then the lead"""
         loc = self.locations[loc_id]
-        return loc.riddle_ids + ([loc.lead_riddle] if loc.lead_riddle else [])
+        return self.state.selection.get(loc_id, []) + ([loc.lead_riddle] if loc.lead_riddle else [])
+
+    def case_riddles(self) -> List[int]:
+        """Every riddle this case asks, in story order"""
+        return [rid for loc_id in STORY_ORDER for rid in self.riddles_at(loc_id)]
+
+    def solved_count(self) -> int:
+        return sum(1 for rid in self.case_riddles() if rid in self.state.solved_riddles)
+
+    def needed(self, loc_id: str, count: int) -> int:
+        """A beat's or a lead's count, shrunk when this case asks fewer riddles here than a full case"""
+        return scaled(count, len(self.state.selection.get(loc_id, [])), self.locations[loc_id].riddles_per_case)
 
     def progress(self, loc_id: str) -> tuple:
         """(solved, total) for a location"""
@@ -678,8 +847,8 @@ class GameEngine:
         loc = self.locations[loc_id]
         if not loc.lead_riddle:
             return False
-        solved_here = sum(1 for i in loc.riddle_ids if i in self.state.solved_riddles)
-        return solved_here >= loc.lead_after
+        solved_here = sum(1 for i in self.state.selection.get(loc_id, []) if i in self.state.solved_riddles)
+        return solved_here >= self.needed(loc_id, loc.lead_after)
 
     def current_riddle(self) -> Optional[Riddle]:
         """The lead comes first once it is available, then the rest in order"""
@@ -687,7 +856,7 @@ class GameEngine:
         solved = self.state.solved_riddles
         if self.lead_available(loc.id) and loc.lead_riddle not in solved:
             return self.riddles[loc.lead_riddle]
-        for rid in loc.riddle_ids:
+        for rid in self.state.selection.get(loc.id, []):
             if rid not in solved:
                 return self.riddles[rid]
         return None
@@ -709,7 +878,12 @@ class GameEngine:
         return new
 
     def match_options(self, riddle: Riddle) -> List[str]:
-        """The right-hand column of a match riddle, shuffled"""
+        """The right-hand column of a match riddle, or the steps of an order riddle, shuffled"""
+        if riddle.kind == "order":
+            steps = list(riddle.sequence)
+            while steps == riddle.sequence:  # never hand over the answer already in order
+                random.shuffle(steps)
+            return steps
         rights = [right for _, right in riddle.pairs]
         random.shuffle(rights)
         return rights
@@ -718,7 +892,7 @@ class GameEngine:
         """Turn typed letters (e.g. 'BCA') into an answer string, or None if they don't make sense"""
         letters = re.sub(r"[^A-Za-z]", "", letters).upper()
         indexes = [ord(ch) - ord("A") for ch in letters]
-        if len(indexes) != len(riddle.pairs) or sorted(indexes) != list(range(len(shown))):
+        if len(indexes) != len(shown) or sorted(indexes) != list(range(len(shown))):
             return None
         return "|".join(shown[i] for i in indexes)
 
@@ -738,7 +912,7 @@ class GameEngine:
 
     def beats_unlocked(self, loc_id: str) -> List[str]:
         solved, _ = self.progress(loc_id)
-        return [text for needed, text in self.locations[loc_id].beats if solved >= needed]
+        return [text for after, text in self.locations[loc_id].beats if solved >= self.needed(loc_id, after)]
 
     def case_notes(self) -> List[Tuple[str, str]]:
         """(location name, note) for everything learned so far, in story order"""
@@ -757,7 +931,8 @@ class GameEngine:
         return [self.locations[i] for i in STORY_ORDER if i in self.state.unlocked_locations]
 
     def total_items(self) -> int:
-        return sum(1 for r in self.riddles.values() if r.item)
+        """Evidence this case can give"""
+        return sum(1 for rid in self.case_riddles() if self.riddles[rid].item)
 
     def can_confront(self) -> bool:
         """Volkov can be confronted once the detective reaches his archive"""
@@ -767,12 +942,13 @@ class GameEngine:
         return self.state.sanity <= 0
 
     def all_riddles_solved(self) -> bool:
-        return len(self.state.solved_riddles) >= len(self.riddles)
+        """Every riddle of this case (not the whole pool) is solved"""
+        return self.solved_count() >= len(self.case_riddles())
 
     def get_ending(self, elena_guess: Optional[str], volkov_beaten: bool) -> tuple:
         """Determine ending from progress, the showdown, and where the detective looked for Elena"""
-        total_riddles = len(self.riddles)
-        solved = len(self.state.solved_riddles)
+        total_riddles = len(self.case_riddles())
+        solved = self.solved_count()
         found = elena_guess == ELENA_ANSWER
 
         if volkov_beaten and found and solved >= total_riddles:
@@ -799,7 +975,88 @@ class GameEngine:
     def new_game(self, difficulty: str = DEFAULT_DIFFICULTY):
         hearts = DIFFICULTIES[difficulty].hearts
         self.state = GameState(difficulty=difficulty, sanity=hearts, max_sanity=hearts)
-        (self.SAVE_DIR / "autosave.json").unlink(missing_ok=True)
+        (self.SAVE_DIR / AUTOSAVE).unlink(missing_ok=True)
+
+    def end_case(self):
+        """The case is over (an ending or a game over): drop its autosave and start afresh.
+        A daily case leaves the normal case's autosave alone."""
+        self.autosave_path().unlink(missing_ok=True)
+        self.state = GameState()
+
+    # --- The daily case ------------------------------------------------------------
+
+    def start_daily(self, day: Optional[str] = None) -> bool:
+        """Start the daily case for a UTC date (today by default), or pick up that day's case
+        where it was left. Returns True when resumed."""
+        day = day or utc_today()
+        saved = self._read_state(self.SAVE_DIR / DAILY_AUTOSAVE)
+        if saved and saved.daily == day:
+            self.state = saved
+            return True
+        self.state = GameState(selection=pick_riddles(seed=f"daily/{day}", daily=True), daily=day,
+                               replay=day in self.daily_records())
+        return False
+
+    def daily_records(self) -> Dict[str, dict]:
+        """Each finished daily case by date: the result to share, the ending, how many replays"""
+        try:
+            with open(self.SAVE_DIR / DAILY_RECORDS) as f:
+                records = json.load(f)
+            return records if isinstance(records, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def daily_in_progress(self, day: Optional[str] = None) -> bool:
+        saved = self._read_state(self.SAVE_DIR / DAILY_AUTOSAVE)
+        return bool(saved and saved.daily == (day or utc_today()))
+
+    def daily_status(self, day: Optional[str] = None) -> str:
+        """For the title screen: "new", "in progress" or "done" (and replays welcome)"""
+        day = day or utc_today()
+        if self.daily_in_progress(day):
+            return "in progress"
+        return "done" if day in self.daily_records() else "new"
+
+    def finish_daily(self, ending: str, elena_guess: Optional[str] = None) -> Optional[str]:
+        """Call when a case ends. For a daily case, records the day (the first finished play
+        counts; later ones are replays) and returns the result to share. None otherwise."""
+        s = self.state
+        if not s.daily:
+            return None
+        records = self.daily_records()
+        first = records.get(s.daily)
+        share = self.daily_share(ending, elena_guess, replay=s.replay or first is not None)
+        if first is None:
+            records[s.daily] = {"share": share, "ending": ending, "score": s.score,
+                                "solved": self.solved_count(), "riddles": len(self.case_riddles()), "replays": 0}
+        else:
+            first["replays"] = first.get("replays", 0) + 1
+        with open(self.SAVE_DIR / DAILY_RECORDS, "w") as f:
+            json.dump(records, f, indent=2, ensure_ascii=False)
+        self.autosave_path().unlink(missing_ok=True)  # nothing left to resume
+        return share
+
+    def daily_share(self, ending: str, elena_guess: Optional[str], replay: bool = False) -> str:
+        """A spoiler-free result to paste into a chat, one square per riddle, place by place:
+        green first try, yellow after a slip, red never solved, black never reached"""
+        s = self.state
+        left = max(s.sanity, 0)
+        hearts = "♥" * left + "♡" * (s.max_sanity - left)
+        lines = [f"Noir Riddles · Daily {s.daily} · {hearts} · {self.solved_count()}/{len(self.case_riddles())}"
+                 + (" · replay" if replay else "")]
+
+        def square(rid: int) -> str:
+            if rid in s.solved_riddles:
+                return "🟨" if rid in s.fumbled_riddles else "🟩"
+            return "🟥" if rid in s.fumbled_riddles else "⬛"
+        lines.append(" ".join("".join(square(rid) for rid in self.riddles_at(loc_id)) for loc_id in STORY_ORDER))
+        if s.showdown_log:
+            rounds = "".join(SHOWDOWN_MARKS[r] for r in s.showdown_log)
+            found = "found" if elena_guess == ELENA_ANSWER else "lost"
+            lines.append(f"Volkov {rounds} · Elena {found} · {ending}")
+        else:
+            lines.append(f"Caught at {self.location().name}")
+        return "\n".join(lines)
 
     def answer(self, riddle: Riddle, choice: str) -> AnswerResult:
         """Check an answer and update state"""
@@ -918,7 +1175,7 @@ class GameEngine:
         if talk is None:
             return []
         solved, _ = self.progress(loc_id)
-        return [q for q in talk.questions if solved >= q.after]
+        return [q for q in talk.questions if solved >= self.needed(loc_id, q.after)]
 
     def locked_questions(self, loc_id: Optional[str] = None) -> int:
         talk = self.interrogation(loc_id)
@@ -1032,34 +1289,61 @@ class GameEngine:
         with open(path, 'w') as f:
             json.dump(asdict(self.state), f, indent=2)
 
+    def autosave_path(self) -> Path:
+        """The daily case autosaves on its own, so it never overwrites the case you Continue"""
+        return self.SAVE_DIR / (DAILY_AUTOSAVE if self.state.daily else AUTOSAVE)
+
     def autosave(self):
-        self._write(self.SAVE_DIR / "autosave.json")
+        self._write(self.autosave_path())
 
     def save_game(self, slot: int):
         self._write(self.SAVE_DIR / f"slot_{slot}.json")
         self.autosave()
 
     def load_game(self, slot: int = 0) -> bool:
-        """Load a slot; slot 0 is the autosave"""
-        name = "autosave.json" if slot == 0 else f"slot_{slot}.json"
-        save_path = self.SAVE_DIR / name
-        if not save_path.exists():
+        """Load a slot; slot 0 is the autosave (of the normal case: the daily case has its own)"""
+        name = AUTOSAVE if slot == 0 else f"slot_{slot}.json"
+        state = self._read_state(self.SAVE_DIR / name)
+        if state is None:
             return False
+        self.state = state
+        return True
 
+    def _read_state(self, save_path: Path) -> Optional[GameState]:
+        if not save_path.exists():
+            return None
         try:
             with open(save_path, 'r') as f:
                 data = json.load(f)
 
             state = GameState(**{k: v for k, v in data.items() if k in GameState.__dataclass_fields__})
+            state.selection = self.repair_selection(data.get("selection"), state.solved_riddles)
             # Saves from before locations were unlockable: open everything already visited
             if "unlocked_locations" not in data:
                 state.unlocked_locations = list(dict.fromkeys([START_LOCATION] + state.visited_locations + [state.current_location]))
             if state.current_location not in self.locations:
                 state.current_location = START_LOCATION
-            self.state = state
-            return True
+            return state
         except (OSError, ValueError, TypeError):
-            return False
+            return None
+
+    @staticmethod
+    def repair_selection(saved, solved: List[int]) -> Dict[str, List[int]]:
+        """A saved case's riddles, checked against the pools as they are now. A place missing from
+        the save (a save from before pools, or a new place) keeps the riddles already solved there
+        and gets a fresh random pick for the rest."""
+        saved = saved if isinstance(saved, dict) else {}
+        selection = {}
+        for loc in LOCATIONS.values():
+            kept = saved.get(loc.id)
+            if isinstance(kept, list):
+                selection[loc.id] = [rid for rid in loc.riddle_ids if rid in kept]  # riddles since removed drop out
+                continue
+            done = [rid for rid in loc.riddle_ids if rid in solved]
+            rest = [rid for rid in loc.riddle_ids if rid not in done]
+            extra = random.sample(rest, max(0, min(len(rest), loc.riddles_per_case - len(done))))
+            selection[loc.id] = [rid for rid in loc.riddle_ids if rid in done or rid in extra]
+        return selection
 
     def get_save_slots(self) -> List[tuple]:
         """(slot, exists, label) for slots 1-3"""
@@ -1072,7 +1356,8 @@ class GameEngine:
                         data = json.load(f)
                     where = LOCATIONS.get(data.get("current_location"), LOCATIONS[START_LOCATION]).name
                     mode = DIFFICULTIES.get(data.get("difficulty"), DIFFICULTIES[DEFAULT_DIFFICULTY]).name
-                    slots.append((i, True, f"{where} | {mode} | Score: {data['score']}, Sanity: {data['sanity']}"))
+                    daily = f"Daily {data['daily']} | " if data.get("daily") else ""
+                    slots.append((i, True, f"{daily}{where} | {mode} | Score: {data['score']}, Sanity: {data['sanity']}"))
                 except (OSError, ValueError, KeyError):
                     slots.append((i, False, "Corrupted"))
             else:
@@ -1083,13 +1368,26 @@ class GameEngine:
 
     def save_code(self) -> str:
         """The whole case as a code the player can copy or write down"""
-        return savecode.encode(asdict(self.state))
+        data = asdict(self.state)
+        # The riddle pick as one number per place, a bit per pool riddle in file order, keeps
+        # codes short. (Reordering a pool in riddles.toml changes what older codes pick.)
+        data["selection"] = {loc_id: sum(1 << n for n, rid in enumerate(LOCATIONS[loc_id].riddle_ids) if rid in ids)
+                             for loc_id, ids in data["selection"].items() if loc_id in LOCATIONS}
+        return savecode.encode(data)
 
     def load_code(self, code: str):
         """Restore a case from a save code. It becomes the autosave and loads like Continue,
         so it goes through the same checks as any save. Raises SaveCodeError (with a message
         for the player) and leaves everything as it was if the code is no good."""
         data = savecode.decode(code)
+        picks = data.get("selection")
+        if isinstance(picks, dict):
+            try:
+                data["selection"] = {loc_id: mask if isinstance(mask, list) else
+                                     [rid for n, rid in enumerate(LOCATIONS[loc_id].riddle_ids) if mask >> n & 1]
+                                     for loc_id, mask in picks.items()}
+            except (KeyError, TypeError):
+                raise SaveCodeError("That code doesn't hold a case this game can open.") from None
         defaults = asdict(GameState())
         for key, value in data.items():
             default = defaults.get(key)
@@ -1117,11 +1415,18 @@ class Showdown:
     def __init__(self, engine: GameEngine, elena_guess: Optional[str] = None):
         self.engine = engine
         rounds = min(engine.difficulty().showdown_rounds, len(VOLKOV_RIDDLES))
-        self.riddles = random.sample(VOLKOV_RIDDLES, rounds)
+        day = engine.state.daily
+        if day:  # everyone faces the same questions on the same day
+            ids = seeded_sample([r.id for r in VOLKOV_RIDDLES], rounds, f"daily/{day}/volkov")
+            self.riddles = [ALL_RIDDLES[i] for i in ids]
+        else:
+            self.riddles = random.sample(VOLKOV_RIDDLES, rounds)
         self.index = 0
         self.elena_guess = elena_guess  # where the detective said Elena is
         self.mistakes = 0
         self.dodges = 0
+        self.slipped = False  # a wrong answer in the current round
+        engine.state.showdown_log = []
 
     @property
     def current(self) -> Optional[Riddle]:
@@ -1145,10 +1450,14 @@ class Showdown:
             self.engine.learn(riddle)
             self.engine.state.score += 30
             self.index += 1
+            self.log("slip" if self.slipped else "clean")
             self._moved()
             return True
         self.engine.state.sanity -= 1
         self.mistakes += 1
+        self.slipped = True
+        if self.lost:
+            self.log("lost")
         self._moved()
         return False
 
@@ -1157,8 +1466,13 @@ class Showdown:
             return False
         self.index += 1
         self.dodges += 1
+        self.log("dodge")
         self._moved()
         return True
+
+    def log(self, outcome: str):
+        self.engine.state.showdown_log.append(outcome)
+        self.slipped = False
 
     def _moved(self):
         self.engine.emit("showdown", showdown=self)

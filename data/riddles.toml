@@ -1,0 +1,1543 @@
+# =============================================================================
+# NOIR LANGUAGE RIDDLES: THE RIDDLES
+# =============================================================================
+#
+# Every riddle in the game, grouped by the place where it is asked. The story
+# (places, people, what they say) is in story.toml. The game checks both files
+# when it starts; if something is wrong it stops and says which file, which
+# riddle and what the problem is.
+#
+# Lines starting with # are comments: the game ignores them.
+#
+# -----------------------------------------------------------------------------
+# A RIDDLE
+# -----------------------------------------------------------------------------
+# Each riddle starts with a [[riddle]] line, followed by its fields:
+#
+#   id            A number, different for every riddle (Volkov's included).
+#                 Saved games and the etymology notebook refer to riddles by
+#                 it, so don't renumber existing riddles; give new ones new
+#                 numbers.
+#   location      Where it is asked: "ClientOffice", "Library", "Cafe",
+#                 "Church" or "Archive" (the ids in story.toml). Each case
+#                 asks only some of a location's riddles, picked at random
+#                 (riddles_per_case in story.toml), in the order of this file.
+#                 The lead riddle of a location is asked in every case.
+#   kind          How it is answered. Leave it out for "choice".
+#                   "choice"  pick one of the options with the number keys
+#                   "type"    type the word
+#                   "match"   pair up words by typing letters
+#                   "order"   put shuffled steps in order by typing letters
+#   language      Shown above the riddle. The notebook groups entries by it.
+#   category      Shown above the riddle, e.g. "etymology", "false friends".
+#   difficulty    1, 2 or 3 (leave it out for 1). Worth 10 points per level.
+#   clue          The word or words under investigation, shown as "Clue: ...".
+#                 The notebook lists it next to the answer.
+#   text          The question.
+#   hint          Shown after a wrong answer, or in exchange for evidence.
+#   explanation   Shown once the riddle is solved, and kept in the notebook.
+#   item          Optional. The evidence won by solving it on the first try.
+#                 Each piece of evidence comes from one riddle only.
+#   item_help     Optional. Extra help shown while you hold some evidence:
+#                   item_help = { evidence = "Cipher Wheel", text = "..." }
+#
+# Choice riddles also have:
+#   answer         The right option.
+#   wrong_answers  1 to 3 wrong options, shown together with the answer.
+#   decoys         Exactly 2 more wrong options. After a wrong pick, the option
+#                  picked is swapped for a decoy and the options reshuffle, so
+#                  guessing through doesn't work.
+#                  Every wrong option must be clearly wrong, and none may
+#                  repeat the answer.
+#   diagram        Optional. ASCII art shown above the options, e.g. a family
+#                  tree with ??? where the answer belongs (??? is highlighted).
+#                  Put it in '''triple single quotes''' so that it is kept
+#                  exactly as drawn. Use spaces, not tabs, and at most 56
+#                  characters per line.
+#
+# Type riddles also have:
+#   answer         The word to type.
+#   accepted       Optional. Other spellings that count too, e.g. ["feet"].
+#                  Capitals, spaces and punctuation are ignored.
+#
+# Match riddles have, instead of an answer:
+#   pairs          The right pairs, left-hand word first. The game shuffles
+#                  the right-hand words and the player types their letters.
+#                    pairs = [
+#                        ["Rat", "advice"],
+#                        ["Chef", "boss"],
+#                    ]
+#
+# Order riddles have, instead of an answer:
+#   sequence       3 to 6 steps in the right order, first to last. The game
+#                  shuffles them and the player types their letters in order.
+#                    sequence = ["Arabic makhāzin", "Italian magazzino",
+#                                "French magasin", "English magazine"]
+#
+# Volkov's riddles for the final showdown are written [[volkov_riddle]], at the
+# end of this file. They have the same fields, except that they have no
+# location and the hint is optional (the showdown has no hints).
+#
+# -----------------------------------------------------------------------------
+# WRITING TEXT
+# -----------------------------------------------------------------------------
+# Text goes in "double quotes". If the text itself contains double quotes, put
+# 'single quotes' around it instead. Long text can go inside triple quotes,
+# over several lines; the game joins the lines with single spaces:
+#
+#   explanation = """
+#   First sentence.
+#   Second sentence.
+#   """
+#
+# Inside "double" or """triple""" quotes a backslash (\) starts a special
+# character, so avoid backslashes there. Diagrams go in '''triple single
+# quotes''', where nothing is special and every line is kept as it is.
+
+# =============================================================================
+# WEBER'S OFFICE  (location = "ClientOffice")
+# =============================================================================
+
+# The lead: asked in every case, because it carries the story.
+[[riddle]]
+id = 1
+location = "ClientOffice"
+language = "Greek"
+category = "location"
+clue = "βιβλίο"
+text = "In Greek, it is βιβλίο (vivlio). Where would you go to borrow one?"
+answer = "Library"
+wrong_answers = ["University", "Bookstore"]
+decoys = ["Post office", "Museum"]
+hint = "Think where books are collected and borrowed."
+explanation = """
+Greek βιβλίο = book; a library is a βιβλιοθήκη ('book case').
+English 'library' took the Latin route: liber (book) → librarium.
+"""
+item = "Case File"
+
+# =============================================================================
+# STAATSBIBLIOTHEK  (location = "Library")
+# =============================================================================
+
+# The lead: asked in every case, because it carries the story.
+[[riddle]]
+id = 2
+location = "Library"
+language = "German"
+category = "location"
+clue = "Linguisten trafen sich, wo Kaffee fließt"
+text = "In German, linguists met where Kaffee flows. Where?"
+answer = "Café Mozart"
+wrong_answers = ["The university", "A beer hall"]
+decoys = ["A bakery", "The train station"]
+hint = "Not a pub. Somewhere with coffee."
+explanation = "Kaffee = coffee. Berlin intellectuals met in cafes."
+item = "Sugar Packet"
+
+[[riddle]]
+id = 3
+location = "Library"
+language = "Spanish"
+category = "etymology"
+clue = "libro | livre | Buch"
+text = "This word is libro in Spanish, livre in French, Buch in German. What is it in English?"
+answer = "Book"
+wrong_answers = ["Library", "Novel"]
+decoys = ["Letter", "Page"]
+hint = "All three words mean the same thing."
+explanation = """
+Libro and livre come from Latin liber (originally 'inner bark').
+Buch is Germanic, a sibling of English 'book'.
+"""
+item = "Spanish Dictionary"
+
+[[riddle]]
+id = 9
+location = "Library"
+language = "Spanish"
+category = "etymology"
+clue = "noche | nox"
+text = "This word is noche in Spanish. In Latin it was nox. What is it in English?"
+answer = "Night"
+wrong_answers = ["Noon", "Noxious"]
+decoys = ["Nook", "Nose"]
+hint = "It is the opposite of day."
+explanation = """
+Latin nox, noctis and English night are cognates from PIE *nókʷts.
+'Noxious' comes from noxa (harm).
+"""
+
+[[riddle]]
+id = 31
+location = "Library"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 2
+clue = "pes, pedis   (p → f, d → t)"
+text = """
+Latin 'pes, pedis' names a body part.
+Apply Grimm's law (p → f, d → t) to find its English cousin.
+"""
+answer = "foot"
+accepted = ["feet"]
+hint = "You stand on two of them."
+explanation = """
+Latin pes, pedis and English foot are cognates:
+Germanic shifted p to f and d to t (Grimm's law).
+Pedal and pedestrian are later loans from the Latin.
+"""
+
+[[riddle]]
+id = 11
+location = "Library"
+language = "Latin"
+category = "etymology"
+difficulty = 2
+clue = "lux"
+text = "This Latin word 'lux' (genitive lucis) means light. What English word derives from it?"
+answer = "Lucid"
+wrong_answers = ["Luxury", "Luck"]
+decoys = ["Lust", "Lush"]
+hint = "Think of a clear, bright mind."
+explanation = """
+Lux, lucis → lucid, elucidate, translucent.
+'Luxury' is a trap: it comes from luxus (excess).
+"""
+item = "Lantern"
+
+[[riddle]]
+id = 13
+location = "Library"
+language = "Greek"
+category = "etymology"
+clue = "φως (phos)"
+text = "This Greek word φως (phos) means light. What English prefix means light?"
+answer = "Photo-"
+wrong_answers = ["Phono-", "Philo-"]
+decoys = ["Phyto-", "Phylo-"]
+hint = "As in photography."
+explanation = "From Greek φῶς, φωτός (phos, photos) = light. Phono- is sound, philo- is love."
+item = "Photograph"
+
+[[riddle]]
+id = 20
+location = "Library"
+language = "Egyptian"
+category = "etymology"
+difficulty = 3
+clue = "iteru"
+text = """
+Ancient Egyptians called the Nile 'iteru', simply 'the river'.
+From which language does the name 'Nile' come?
+"""
+answer = "Greek"
+wrong_answers = ["Egyptian", "Arabic"]
+decoys = ["Coptic", "Hebrew"]
+hint = "Herodotus wrote about it."
+explanation = "'Nile' comes from Greek Νεῖλος (Neilos), of uncertain origin. The Egyptians just said iteru."
+item = "Papyrus Scroll"
+
+[[riddle]]
+id = 35
+location = "Library"
+language = "Arabic"
+category = "odd one out"
+difficulty = 2
+clue = "Arabic loanwords in English"
+text = "Which of these is NOT a loanword from Arabic?"
+answer = "Tea"
+wrong_answers = ["Algebra", "Alcohol", "Coffee"]
+decoys = ["Zero", "Sofa"]
+hint = "One of these came from China, by sea."
+explanation = """
+Algebra (al-jabr), alcohol (al-kuḥl), coffee (qahwa), zero (ṣifr) and sofa (ṣuffa) are
+Arabic. Tea comes from Chinese (Min dialect 'te'), brought by Dutch traders.
+"""
+
+[[riddle]]
+id = 21
+location = "Library"
+language = "Greek"
+category = "cognates"
+clue = "ὕδωρ"
+text = "Greek ὕδωρ (hydor) means water. Which of these words does NOT contain this root?"
+answer = "Hybrid"
+wrong_answers = ["Hydrogen", "Dehydrated"]
+decoys = ["Hydrant", "Hydraulic"]
+hint = "Two of these are wet."
+explanation = """
+Hydrogen ('water-maker') and dehydrated contain hydor.
+Hybrid comes from Latin hybrida, 'mongrel'.
+"""
+
+[[riddle]]
+id = 26
+location = "Library"
+language = "Latin"
+category = "etymology"
+difficulty = 2
+clue = "specere"
+text = "Latin 'specere' means to look. Which of inspect, respect and spectacle come from it?"
+answer = "All of these"
+wrong_answers = ["Only inspect", "Only spectacle", "None of these"]
+decoys = ["Only respect", "Only inspect and respect"]
+hint = "Think of words with 'spect'."
+explanation = "Specere → inspect, respect, suspect, specimen, spectacle, perspective, etc."
+item = "Magnifying Glass"
+
+[[riddle]]
+id = 29
+location = "Library"
+language = "PIE"
+category = "etymology"
+difficulty = 2
+clue = "*tréyes"
+text = "PIE root *tréyes means three. Which English / Greek / Latin set comes from it?"
+answer = "Three / τρία / tres"
+wrong_answers = ["Two / δύο / duo", "Tree / δένδρο / arbor"]
+decoys = ["Thirst / δίψα / sitis", "Throne / θρόνος / thronus"]
+hint = "Direct cognates."
+explanation = "English three, Greek τρία (tria), Latin tres, all from PIE *tréyes."
+
+[[riddle]]
+id = 40
+location = "Library"
+kind = "order"
+language = "Alphabets"
+category = "order"
+difficulty = 2
+clue = "A B C"
+text = """
+Herr Schmidt lays four alphabets on the desk, each one learned from another.
+Put them in order, from the oldest ancestor to the letters on this page.
+"""
+sequence = ["Phoenician", "Greek", "Etruscan", "Latin"]
+hint = "The Romans did not learn their letters straight from the Greeks, but from their neighbours to the north."
+explanation = """
+The Phoenicians wrote only consonants. The Greeks borrowed their letters and used some of them
+for vowels. Greek settlers at Cumae passed their alphabet on to the Etruscans, and the Romans
+learned theirs from the Etruscans.
+"""
+item = "Wax Tablet"
+
+[[riddle]]
+id = 41
+location = "Library"
+kind = "order"
+language = "Indo-European"
+category = "order"
+difficulty = 3
+clue = "the oldest texts"
+text = """
+Schmidt's rarest shelf is arranged by age. Put these languages in the order in which they
+were first written down, oldest first.
+"""
+sequence = ["Hittite", "Mycenaean Greek", "Gothic", "Old Church Slavonic"]
+hint = """
+The oldest was pressed into clay in Anatolia. The youngest was first written down by
+missionaries to the Slavs.
+"""
+explanation = """
+Hittite tablets from Hattusa go back to the 17th century BC, the oldest Indo-European texts
+of all. Mycenaean Greek, written in Linear B, follows from the late 15th century BC.
+Wulfila translated the Bible into Gothic in the 4th century AD, and Cyril and Methodius
+created a script for Old Church Slavonic in the 860s.
+"""
+item = "Clay Tablet"
+
+[[riddle]]
+id = 42
+location = "Library"
+language = "Latin"
+category = "family tree"
+difficulty = 2
+clue = "Latin's daughters"
+text = "A family tree from Elena's desk, one name torn away. Which language fills the gap?"
+diagram = '''
+                        Latin
+                          |
+    +----------+----------+-----------+-----------+
+    |          |          |           |           |
+ Italian     French    Spanish    Portuguese     ???
+'''
+answer = "Romanian"
+wrong_answers = ["Albanian", "Hungarian", "Greek"]
+decoys = ["Maltese", "Basque"]
+hint = "Its speakers live on the lower Danube."
+explanation = """
+Romanian grew out of the Latin spoken in the Roman provinces of south-eastern Europe, which
+makes it a sister of Italian, French, Spanish and Portuguese. Albanian took many words from
+Latin, but it is a branch of Indo-European of its own. Hungarian is Uralic, Greek is Hellenic,
+Maltese is Semitic, and Basque is related to no other known language.
+"""
+
+[[riddle]]
+id = 43
+location = "Library"
+language = "Celtic"
+category = "family tree"
+difficulty = 2
+clue = "Insular Celtic"
+text = "Elena's chart of the Celtic languages has a blank under Brittonic. Which language belongs there?"
+diagram = '''
+                          Celtic
+                            |
+           +----------------+----------------+
+           |                                 |
+        Goidelic                         Brittonic
+   +-------+-----------+             +-------+-------+
+   |       |           |             |       |       |
+ Irish    Manx  Scottish Gaelic    Welsh  Cornish   ???
+'''
+answer = "Breton"
+wrong_answers = ["Galician", "Basque", "Flemish"]
+decoys = ["Frisian", "Scots"]
+hint = "It is spoken across the Channel, in France."
+explanation = """
+Breton was brought to Brittany by Britons who crossed the Channel in the early Middle Ages;
+its closest relative is Cornish. Galician is a Romance language, close to Portuguese. Basque
+is related to no other known language, and Flemish, Frisian and Scots are Germanic.
+"""
+
+[[riddle]]
+id = 44
+location = "Library"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "nōmen · ὄνομα · nā́man · name"
+text = """
+Latin nōmen, Greek ónoma, Sanskrit nā́man, English name.
+Which Proto-Indo-European word are they all descended from?
+"""
+answer = "*h₁nómn̥"
+wrong_answers = ["*nókʷts", "*néwos", "*h₁néwn̥"]
+decoys = ["*wódr̥", "*méh₂tēr"]
+hint = "Follow the consonants: n, m, n."
+explanation = """
+All four come from PIE *h₁nómn̥, 'name'. The look-alikes are *nókʷts 'night', *néwos 'new'
+and *h₁néwn̥ 'nine'; *wódr̥ is 'water' and *méh₂tēr 'mother'.
+"""
+item = "Calling Card"
+
+[[riddle]]
+id = 45
+location = "Library"
+language = "English"
+category = "etymology"
+clue = "clew"
+text = "A detective lives by clues. The word began as clew, a ball of something. Of what?"
+answer = "Thread"
+wrong_answers = ["Wax", "Clay"]
+decoys = ["Iron", "Glass"]
+hint = "Theseus unwound one to find his way out of the Labyrinth."
+explanation = """
+Clue is a respelling of clew, 'a ball of thread' (Old English cliewen). Ariadne gave Theseus
+a clew to lead him out of the Labyrinth, and so a clue became anything that shows the way
+through a puzzle.
+"""
+item = "Ball of Thread"
+
+[[riddle]]
+id = 46
+location = "Library"
+language = "Greek"
+category = "etymology"
+difficulty = 2
+clue = "νόστος + ἄλγος"
+text = """
+In 1688 a medical student at Basel built 'nostalgia' out of two Greek words: ἄλγος (álgos),
+'pain', and νόστος (nóstos). What is nóstos?
+"""
+answer = "Homecoming"
+wrong_answers = ["Memory", "Youth"]
+decoys = ["Old age", "Sleep"]
+hint = "Odysseus spent ten years trying to achieve one."
+explanation = """
+Johannes Hofer coined nostalgia in his Basel dissertation of 1688, from Greek nóstos
+'homecoming' and álgos 'pain', as a learned name for Heimweh, homesickness, which was then
+treated as a disease.
+"""
+item = "Old Postcard"
+
+# =============================================================================
+# CAFÉ MOZART  (location = "Cafe")
+# =============================================================================
+
+# The lead: asked in every case, because it carries the story.
+[[riddle]]
+id = 24
+location = "Cafe"
+language = "Russian"
+category = "etymology"
+difficulty = 2
+clue = "spasibo"
+text = "Russian 'spasibo' (thank you) comes from what religious phrase?"
+answer = "God save"
+wrong_answers = ["Save me", "Thank God", "Spas"]
+decoys = ["Bless you", "Holy Russia"]
+hint = "Spasi Bog = God save (you)."
+explanation = "From Old Church Slavonic 'spasi bog' = God save (you)."
+item = "Religious Text"
+
+[[riddle]]
+id = 5
+location = "Cafe"
+language = "Arvanitika"
+category = "false friends"
+difficulty = 2
+clue = "buke | ψωμί"
+text = "In Arvanitika, it is buke. In Greek, it is ψωμί. What is it in English?"
+answer = "Bread"
+wrong_answers = ["Book", "Brick"]
+decoys = ["Cheese", "Water"]
+hint = "It is a staple food."
+explanation = "Arvanitika buke and Greek ψωμί both mean bread. It only looks like 'book'."
+item = "Arvanitika Notes"
+
+[[riddle]]
+id = 7
+location = "Cafe"
+language = "German"
+category = "false friends"
+clue = "Gift"
+text = "In German, Gift does not mean a present. What does it mean?"
+answer = "Poison"
+wrong_answers = ["Gift", "Present"]
+decoys = ["Money", "Luck"]
+hint = "In English, gift is positive."
+explanation = """
+German Gift once meant 'something given', a dose, and narrowed to 'poison'.
+English kept the original sense.
+"""
+
+[[riddle]]
+id = 32
+location = "Cafe"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 2
+clue = "tu   (t → th)"
+text = """
+Latin 'tu' means 'you' (one person). Grimm's law turned t into th.
+What is the old English word, still heard in prayers?
+"""
+answer = "thou"
+accepted = ["thee"]
+hint = "'___ shalt not...'"
+explanation = "Latin tu and English thou are cognates; t → th is Grimm's law. German kept du."
+
+[[riddle]]
+id = 10
+location = "Cafe"
+language = "Russian"
+category = "etymology"
+difficulty = 2
+clue = "водка | вода"
+text = "This Russian word is водка (vodka). From вода (voda) meaning water. What is the connection?"
+answer = "Little water"
+wrong_answers = ["Fire water", "Strong drink"]
+decoys = ["Grain spirit", "Holy water"]
+hint = "Vodka is a diminutive."
+explanation = "Vodka is the diminutive of вода (water)."
+item = "Vodka Bottle"
+
+[[riddle]]
+id = 16
+location = "Cafe"
+language = "Arabic"
+category = "borrowings"
+difficulty = 2
+clue = "sukkar"
+text = "This Arabic word 'sukkar' means sugar. Through which language did it reach English?"
+answer = "Old French"
+wrong_answers = ["Persian", "Greek"]
+decoys = ["Dutch", "Old Norse"]
+hint = "It came to England via the Mediterranean and the Normans' language."
+explanation = """
+Sanskrit śarkarā → Persian shakar → Arabic sukkar → Medieval Latin succarum / Old French
+sucre → English sugar.
+"""
+item = "Sugar Cube"
+
+[[riddle]]
+id = 36
+location = "Cafe"
+kind = "match"
+language = "German"
+category = "false friends"
+difficulty = 2
+clue = "Rat · bekommen · Chef"
+text = "Match each German false friend to what it really means."
+pairs = [
+    ["Rat", "advice"],
+    ["bekommen", "to receive"],
+    ["Chef", "boss"],
+]
+hint = "A German 'Chef' runs the office, not the kitchen."
+explanation = "Rat = advice (not a rodent), bekommen = to receive (not 'become'), Chef = boss (not a cook)."
+item = "Waiter's Notepad"
+
+[[riddle]]
+id = 18
+location = "Cafe"
+language = "Japanese"
+category = "borrowings"
+clue = "パン"
+text = "The Japanese word 'pan' (パン) for bread comes from which language?"
+answer = "Portuguese"
+wrong_answers = ["Chinese", "English", "French"]
+decoys = ["Dutch", "Korean"]
+hint = "From Portuguese pão."
+explanation = "Portuguese traders brought bread to Japan in the 16th century."
+item = "Portuguese Bread"
+
+[[riddle]]
+id = 27
+location = "Cafe"
+language = "French"
+category = "false friends"
+difficulty = 2
+clue = "actuellement"
+text = "In French, 'actuellement' does NOT mean 'actually'. What does it mean?"
+answer = "Currently"
+wrong_answers = ["Actually", "Accurately", "Finally"]
+decoys = ["Eventually", "Seriously"]
+hint = "Think time, not truth."
+explanation = "Actuellement = currently, at the moment. For 'actually', French says 'en fait'."
+
+[[riddle]]
+id = 47
+location = "Cafe"
+kind = "order"
+language = "Sanskrit"
+category = "order"
+difficulty = 2
+clue = "orange"
+text = """
+Karl peels an orange for you. "Came a long way, this one."
+Put the word's journey in order, oldest first.
+"""
+sequence = ["Sanskrit nāraṅga", "Persian nārang", "Arabic nāranj", "Old French orenge", "English orange"]
+hint = "It travelled west with the fruit, along the trade routes."
+explanation = """
+Sanskrit nāraṅga passed into Persian nārang and Arabic nāranj, then into Italian (narancia,
+later arancia) and Old French orenge; English had the word by the late 1300s. The n probably
+went missing because it was heard as part of the article: una narancia, un'arancia.
+"""
+item = "Orange Peel"
+
+[[riddle]]
+id = 48
+location = "Cafe"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "cow · βοῦς · gáuḥ · govs"
+text = """
+Karl's milk jug is shaped like a cow. English cow, Greek βοῦς (boûs), Sanskrit gáuḥ,
+Latvian govs: which Proto-Indo-European word is their ancestor?
+"""
+answer = "*gʷṓws"
+wrong_answers = ["*h₁éḱwos", "*h₂ówis", "*ḱwṓ"]
+decoys = ["*wĺ̥kʷos", "*h₂ŕ̥tḱos"]
+hint = "Greek turned a gʷ into b, and Germanic turned it into k."
+explanation = """
+All four go back to PIE *gʷṓws, 'cattle'. The others are the horse (*h₁éḱwos), the sheep
+(*h₂ówis), the dog (*ḱwṓ), the wolf (*wĺ̥kʷos) and the bear (*h₂ŕ̥tḱos).
+Latin bōs comes from the same word too, but borrowed from a neighbouring Italic language.
+"""
+
+[[riddle]]
+id = 49
+location = "Cafe"
+language = "Spanish"
+category = "odd one out"
+difficulty = 2
+clue = "al-"
+text = """
+Karl's Spanish is rusty, but he knows that many Spanish words kept the Arabic article al-,
+'the'. Which of these does NOT come from Arabic?
+"""
+answer = "alma (soul)"
+wrong_answers = ["almohada (pillow)", "algodón (cotton)", "alcalde (mayor)"]
+decoys = ["aceite (oil)", "azúcar (sugar)"]
+hint = "One of them is plain Latin that just happens to begin with al-."
+explanation = """
+Alma comes from Latin anima, 'soul, breath'. Almohada (Arabic miḵadda, 'pillow'), algodón
+(quṭn, 'cotton') and alcalde (al-qāḍī, 'the judge') kept the article al-; in aceite
+(az-zayt, 'the oil') and azúcar (as-sukkar, 'the sugar') it blended into the next sound.
+"""
+
+[[riddle]]
+id = 50
+location = "Cafe"
+language = "Spanish"
+category = "borrowings"
+clue = "ojalá"
+text = "'Ojalá,' Karl sighs: 'if only.' The word is Arabic in disguise. What did it first say?"
+answer = "God willing"
+wrong_answers = ["Peace be with you", "God is great"]
+decoys = ["Praise be to God", "In the name of God"]
+hint = "It leaves the outcome in God's hands."
+explanation = """
+Ojalá comes from Andalusian Arabic law šāʾa llāh, 'if God wills it' (or perhaps wa šāʾa llāh,
+'and may God will it'), much like Arabic ʾin šāʾa llāh, 'inshallah'.
+"""
+
+[[riddle]]
+id = 51
+location = "Cafe"
+language = "Old Norse"
+category = "borrowings"
+difficulty = 2
+clue = "egges or eyren"
+text = """
+In 1490 the printer William Caxton told of a mercer who asked a Kentish woman for 'egges'.
+She answered that she spoke no French: to her they were eyren. Where did 'egg' come from?
+"""
+answer = "Old Norse"
+wrong_answers = ["French", "Latin"]
+decoys = ["Dutch", "Welsh"]
+hint = "Think of who settled the north of England."
+explanation = """
+Egg is Old Norse egg, which came into English in the north, where the Vikings had settled.
+Eyren was the southern plural of the native Old English word, ǣg. After 1500 the northern
+word won.
+"""
+item = "Printer's Proof"
+
+[[riddle]]
+id = 52
+location = "Cafe"
+kind = "match"
+language = "German"
+category = "compounds"
+clue = "Handschuh · Fingerhut · Nilpferd"
+text = """
+Karl's crossword is full of German words that say exactly what they are.
+Match each one to its English meaning.
+"""
+pairs = [
+    ["Handschuh", "glove"],
+    ["Fingerhut", "thimble"],
+    ["Nilpferd", "hippopotamus"],
+]
+hint = "Read them literally: hand shoe, finger hat, Nile horse."
+explanation = """
+German builds words out of what it already has: a Handschuh is a 'hand shoe', a Fingerhut a
+'finger hat', and a Nilpferd a 'Nile horse', a loose translation of hippopotamus, Greek for
+'river horse'.
+"""
+item = "Leather Glove"
+
+[[riddle]]
+id = 53
+location = "Cafe"
+language = "French"
+category = "etymology"
+clue = "chauffeur"
+text = """
+A black car waits outside the café, a chauffeur at the wheel.
+Before there were motor cars, what was a French chauffeur?
+"""
+answer = "A stoker"
+wrong_answers = ["A coachman", "A butler"]
+decoys = ["A locksmith", "A doorman"]
+hint = "Chauffer means 'to heat'."
+explanation = """
+French chauffeur, from chauffer 'to heat', was the man who stoked a steam engine. The first
+motor cars ran on steam, so the French called their drivers chauffeurs, and English took the
+word over in 1896.
+"""
+item = "Car Keys"
+
+[[riddle]]
+id = 54
+location = "Cafe"
+language = "Russian"
+category = "false friends"
+clue = "магазин (magazin)"
+text = """
+Two of Volkov's men at the bar: one sends the other to the магазин (magazin).
+He is not going to read. What is a магазин?
+"""
+answer = "A shop"
+wrong_answers = ["A newspaper", "A library"]
+decoys = ["A theatre", "A post office"]
+hint = "Think of French magasin."
+explanation = """
+Russian магазин is a shop. Like English magazine, it goes back through French magasin and
+Italian magazzino to Arabic makhāzin, 'storehouses'. English turned the storehouse into a
+periodical; Russian turned it into a shop.
+"""
+
+[[riddle]]
+id = 55
+location = "Cafe"
+language = "Sanskrit"
+category = "etymology"
+difficulty = 2
+clue = "jaṅgala"
+text = """
+Karl calls the potted palms in the corner his 'jungle'. The word comes from Sanskrit jaṅgala.
+What kind of land was that?
+"""
+answer = "Dry and sparsely wooded"
+wrong_answers = ["Dense rainforest", "Swamp"]
+decoys = ["Snowy mountains", "Riverbank"]
+hint = "The opposite of what the word means today."
+explanation = """
+Sanskrit jaṅgala meant 'arid, sparsely wooded'. Hindi jangal came to mean wasteland, forest
+or any uncultivated ground, and English, from 1776, used it for the tangled forests of India.
+"""
+
+# =============================================================================
+# ST. NICHOLAS CHURCH  (location = "Church")
+# =============================================================================
+
+# The lead: asked in every case, because it carries the story.
+[[riddle]]
+id = 12
+location = "Church"
+language = "French"
+category = "etymology"
+difficulty = 2
+clue = "histoire"
+text = """
+In French, 'histoire' means both history and story.
+What everyday English word shares its root?
+"""
+answer = "Story"
+wrong_answers = ["Histogram", "Hysteria"]
+decoys = ["Mystery", "Stair"]
+hint = "From Latin historia."
+explanation = """
+Story is a clipped form of Old French estoire, from Latin historia.
+Histogram (histos, 'mast') and hysteria (hystera, 'womb') only look similar.
+"""
+item = "History Book"
+
+[[riddle]]
+id = 6
+location = "Church"
+language = "Greek"
+category = "etymology"
+clue = "πατήρ | Vater"
+text = "In Greek, it is πατήρ (pater). In German, it is Vater. What is it in English?"
+answer = "Father"
+wrong_answers = ["Mother", "Brother"]
+decoys = ["Uncle", "Pastor"]
+hint = "PIE root: *ph₂tḗr"
+explanation = "All descend from Proto-Indo-European *ph₂tḗr. Germanic turned p into f/v."
+
+[[riddle]]
+id = 8
+location = "Church"
+language = "German"
+category = "cognates"
+clue = "Mutter | μητέρα | mater"
+text = "It is Mutter in German, μητέρα (mitera) in Greek, mater in Latin. What is it in English?"
+answer = "Mother"
+wrong_answers = ["Sister", "Aunt"]
+decoys = ["Daughter", "Wife"]
+hint = "PIE root: *méh₂tēr"
+explanation = "All from PIE *méh₂tēr. Preserved across 4000+ years."
+item = "Family Tree"
+
+[[riddle]]
+id = 33
+location = "Church"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 3
+clue = "centum   (k → h, t → d)"
+text = """
+Latin 'centum' (said 'kentum') means a number. Grimm's law shifted k to h and t to d.
+What is it in English?
+"""
+answer = "hundred"
+hint = "Ten times ten."
+explanation = """
+Latin centum and English hundred share PIE *ḱm̥tóm: k → h and t → d are Grimm's law.
+The -red was added later, from an old word for 'count'.
+"""
+item = "Parish Ledger"
+
+[[riddle]]
+id = 17
+location = "Church"
+language = "Hebrew"
+category = "etymology"
+difficulty = 2
+clue = "שלום"
+text = "The Hebrew word 'shalom' means peace. What does its root literally mean?"
+answer = "Wholeness"
+wrong_answers = ["Hello", "Victory"]
+decoys = ["Silence", "Surrender"]
+hint = "Root means completeness."
+explanation = "Peace as wholeness, not just absence of conflict."
+item = "Peace Symbol"
+
+[[riddle]]
+id = 37
+location = "Church"
+kind = "match"
+language = "Greek"
+category = "cognates"
+difficulty = 2
+clue = "θεός · πῦρ · χρόνος"
+text = "Match each Greek word to the English word built from it."
+pairs = [
+    ["θεός (theos)", "theology"],
+    ["πῦρ (pyr)", "pyromaniac"],
+    ["χρόνος (chronos)", "chronicle"],
+]
+hint = "πῦρ is fire."
+explanation = """
+θεός (theos) = god → theology; πῦρ (pyr) = fire → pyromaniac; χρόνος (chronos) = time →
+chronicle.
+"""
+
+[[riddle]]
+id = 23
+location = "Church"
+language = "Spanish"
+category = "false friends"
+clue = "embarazada"
+text = "In Spanish, 'embarazada' does NOT mean embarrassed. What does it mean?"
+answer = "Pregnant"
+wrong_answers = ["Embarrassed", "Sad", "Happy"]
+decoys = ["Married", "Engaged"]
+hint = "Classic false friend!"
+explanation = "Embarazada = pregnant. 'Avergonzada' = embarrassed."
+
+[[riddle]]
+id = 28
+location = "Church"
+language = "Arvanitika"
+category = "cognates"
+difficulty = 2
+clue = "motër"
+text = """
+Albanian 'motër' means sister, and Arvanitika inherited it.
+Which English word shares its PIE root?
+"""
+answer = "Mother"
+wrong_answers = ["Sister", "Brother"]
+decoys = ["Motor", "Other"]
+hint = "The meaning shifted inside the family."
+explanation = "Albanian motër comes from PIE *méh₂tēr, 'mother'. Along the way it came to mean 'sister'."
+
+[[riddle]]
+id = 56
+location = "Church"
+kind = "order"
+language = "English"
+category = "order"
+difficulty = 3
+clue = "daughter"
+text = """
+Father Thomas traces one family back through the parish books, and one word back through
+the ages. Put these forms of 'daughter' in order, oldest first.
+"""
+sequence = ["*dʰugh₂tḗr", "*duhtēr", "dohtor", "doughter", "daughter"]
+hint = """
+Starred forms are reconstructed, older than any book. The one with a laryngeal (h₂) is the
+oldest of all.
+"""
+explanation = """
+Proto-Indo-European *dʰugh₂tḗr became Proto-Germanic *duhtēr, Old English dohtor,
+Middle English doughter and English daughter. Greek thugátēr and Sanskrit duhitṛ́ come from
+the same word.
+"""
+item = "Baptism Record"
+
+[[riddle]]
+id = 57
+location = "Church"
+language = "Semitic"
+category = "family tree"
+difficulty = 2
+clue = "Semitic"
+text = """
+Father Thomas keeps a chart of the languages of Scripture and their kin. One name has faded.
+Which language belongs in the gap?
+"""
+diagram = '''
+                        Semitic
+                           |
+      +-------------+------+------+-------------+
+      |             |             |             |
+    Hebrew        Arabic       Aramaic         ???
+'''
+answer = "Amharic"
+wrong_answers = ["Coptic", "Persian", "Turkish"]
+decoys = ["Armenian", "Georgian"]
+hint = "It has a script of its own, and is spoken in the Horn of Africa."
+explanation = """
+Amharic, spoken in Ethiopia, is Semitic like Hebrew, Arabic and Aramaic. Coptic, the last
+stage of Egyptian, belongs to a sister branch of the Afroasiatic family, but is not Semitic.
+Persian and Armenian are Indo-European, Turkish is Turkic, and Georgian is Kartvelian.
+"""
+
+[[riddle]]
+id = 58
+location = "Church"
+language = "PIE"
+category = "reconstruction"
+difficulty = 3
+clue = "sister · soror · svásṛ · sestra"
+text = """
+English sister, Latin soror, Sanskrit svásṛ, Russian sestra.
+Which Proto-Indo-European word is behind them all?
+"""
+answer = "*swésōr"
+wrong_answers = ["*bʰréh₂tēr", "*méh₂tēr", "*suHnús"]
+decoys = ["*dʰugh₂tḗr", "*ph₂tḗr"]
+hint = "Sanskrit kept it best: s, v, s, r."
+explanation = """
+All four come from PIE *swésōr, 'sister'. Latin turned the s between vowels into r (soror),
+and Germanic slipped in a t (English sister, German Schwester); Slavic sestra has one too.
+The others are brother, mother, son, daughter and father.
+"""
+
+[[riddle]]
+id = 59
+location = "Church"
+language = "Persian"
+category = "borrowings"
+difficulty = 2
+clue = "παράδεισος (parádeisos)"
+text = """
+Greek parádeisos, the source of 'paradise', was borrowed from an Iranian word.
+What did that word mean?
+"""
+answer = "A walled park"
+wrong_answers = ["The sky", "Eternal life"]
+decoys = ["A holy mountain", "A golden city"]
+hint = "Persian kings kept them, full of trees and animals."
+explanation = """
+The Iranian word (compare Avestan pairi-daēza) meant 'walled enclosure', from pairi- 'around'
+(Greek peri-) and a root meaning 'to build a wall'. Xenophon used parádeisos for the parks of
+Persian kings, and the Greek Bible used it for the garden of Eden.
+"""
+item = "Pressed Flower"
+
+[[riddle]]
+id = 60
+location = "Church"
+language = "Hebrew"
+category = "etymology"
+difficulty = 2
+clue = "משיח · Χριστός"
+text = "Hebrew māšîaḥ (messiah) and Greek Christós mean the same thing. What?"
+answer = "Anointed"
+wrong_answers = ["Saviour", "King"]
+decoys = ["Shepherd", "Teacher"]
+hint = "Kings and priests had oil poured over their heads."
+explanation = """
+Hebrew māšîaḥ comes from māšaḥ, 'to anoint'. The Greek translators of the Septuagint rendered
+it Christós, from chríō, 'to anoint': Messiah and Christ are one title in two languages.
+"""
+item = "Anointing Oil"
+
+[[riddle]]
+id = 61
+location = "Church"
+language = "Greek"
+category = "etymology"
+clue = "ἔνθεος (éntheos)"
+text = "The sacristan sings with great enthusiasm. In Greek, an éntheos person had what inside them?"
+answer = "A god"
+wrong_answers = ["A fire", "A secret"]
+decoys = ["Strong wine", "A song"]
+hint = "Think of theology."
+explanation = """
+Greek éntheos, 'with a god inside' (en 'in' + theós 'god'), described people possessed by a
+god, and enthousiasmós was that divine frenzy. English first used enthusiasm for excessive
+religious zeal, before it could mean zeal for anything.
+"""
+
+[[riddle]]
+id = 62
+location = "Church"
+language = "Greek"
+category = "etymology"
+clue = "κοιμητήριον (koimētḗrion)"
+text = """
+Father Thomas leads you past the churchyard. Greek koimētḗrion, the source of 'cemetery',
+first meant what?
+"""
+answer = "A place to sleep"
+wrong_answers = ["A field of stones", "A house of the dead"]
+decoys = ["A holy garden", "A place of weeping"]
+hint = "Early Christians spoke of death as a sleep."
+explanation = """
+A koimētḗrion was a sleeping place, a dormitory, from koimân 'to put to sleep'. Early
+Christian writers used it for burial grounds, where the dead sleep until the resurrection.
+"""
+item = "Grave Rubbing"
+
+[[riddle]]
+id = 63
+location = "Church"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 2
+clue = "cornū   (k → h)"
+text = "Latin cornū grows on a bull's head. Grimm's law turned k into h. What is it in English?"
+answer = "horn"
+accepted = ["horns"]
+hint = "The archangel Gabriel blows one."
+explanation = """
+Latin cornū and English horn are cognates from PIE *ḱr̥h₂nóm: Germanic turned the k into h
+(Grimm's law). Unicorn and cornet come from the Latin word, by way of French.
+"""
+
+# =============================================================================
+# SECRET ARCHIVE  (location = "Archive")
+# =============================================================================
+
+[[riddle]]
+id = 4
+location = "Archive"
+language = "Russian"
+category = "cognates"
+difficulty = 2
+clue = "новый | novus | νέος"
+text = "Russian новый (novyi), Latin novus, Greek νέος (neos). What is it in English?"
+answer = "New"
+wrong_answers = ["Noon", "Nine"]
+decoys = ["Now", "Near"]
+hint = "The opposite of old."
+explanation = "All from PIE *néwos. 'Nine' looks close but comes from a different root, *h₁néwn̥."
+item = "Cipher Wheel"
+
+[[riddle]]
+id = 14
+location = "Archive"
+language = "Sanskrit"
+category = "etymology"
+difficulty = 2
+clue = "danta"
+text = "The Sanskrit word 'danta' means tooth. What English word is related?"
+answer = "Dental"
+wrong_answers = ["Dandy", "Dance"]
+decoys = ["Denim", "Dainty"]
+hint = "Think of your dentist."
+explanation = """
+Sanskrit दन्त (danta) and Latin dens, dentis (→ dental) share PIE *h₃dónts, which also
+became English 'tooth'.
+"""
+item = "Dental Mirror"
+
+[[riddle]]
+id = 34
+location = "Archive"
+kind = "type"
+language = "Latin"
+category = "sound shift"
+difficulty = 2
+clue = "genu   (g → k)"
+text = """
+Latin 'genu' is a body part. Grimm's law turned g into k. What is it in English?
+(The k is silent now.)
+"""
+answer = "knee"
+accepted = ["knees"]
+hint = "It bends when you kneel."
+explanation = """
+Latin genu and English knee are cognates: g → k is Grimm's law.
+The k in 'knee' was pronounced until the 1600s.
+"""
+
+[[riddle]]
+id = 15
+location = "Archive"
+language = "Old Norse"
+category = "borrowings"
+clue = "skyrta"
+text = """
+Old Norse 'skyrta' meant shirt.
+English kept its native 'shirt', but borrowed the Norse word too. As what?
+"""
+answer = "Skirt"
+wrong_answers = ["Short", "Scarf"]
+decoys = ["Shawl", "Scarlet"]
+hint = "Vikings kept the hard 'sk' sound."
+explanation = """
+Shirt (Old English scyrte) and skirt (Old Norse skyrta) are the same word.
+The Vikings left English doublets like this.
+"""
+item = "Viking Brooch"
+
+[[riddle]]
+id = 19
+location = "Archive"
+language = "Finnish"
+category = "etymology"
+difficulty = 2
+clue = "kala"
+text = "Finnish 'kala' means fish. It's unrelated to most European words. Why?"
+answer = "Uralic language"
+wrong_answers = ["Indo-European", "Slavic", "Germanic"]
+decoys = ["Celtic", "Baltic"]
+hint = "Finnish is not Indo-European."
+explanation = """
+Finnish belongs to the Uralic family.
+Its cousin is Hungarian hal (fish), not English or German.
+"""
+item = "Language Map"
+
+[[riddle]]
+id = 39
+location = "Archive"
+kind = "type"
+language = "Cipher"
+category = "cipher"
+difficulty = 3
+clue = "F U B S W"
+text = "Hidden in Volkov's files, a scrap of paper in Elena's hand. Decode it."
+answer = "crypt"
+hint = "Each letter was moved the same number of places along the alphabet."
+explanation = """
+A Caesar cipher: every letter shifted three places forward.
+Elena was telling you where she is.
+"""
+item_help = { evidence = "Cipher Wheel", text = "Your Cipher Wheel is set to 3: move each letter back three places." }
+
+[[riddle]]
+id = 22
+location = "Archive"
+language = "German"
+category = "etymology"
+difficulty = 2
+clue = "Buchstabe"
+text = "German 'Buchstabe' means letter (of alphabet). What does it literally mean?"
+answer = "Beech stick"
+wrong_answers = ["Book letter", "Letter book"]
+decoys = ["Oak tablet", "Stamp mark"]
+hint = "Buche = beech, Stab = staff/stick."
+explanation = """
+Early Germanic runes were carved on beech staves.
+Buch and English 'book' are probably named after the beech too.
+"""
+item = "Quill Pen"
+
+[[riddle]]
+id = 38
+location = "Archive"
+language = "French"
+category = "odd one out"
+difficulty = 2
+clue = "Norman French, 1066"
+text = """
+After 1066, Norman French gave English its words for meat.
+Which of these is NOT from French?
+"""
+answer = "Sheep"
+wrong_answers = ["Beef", "Pork", "Mutton"]
+decoys = ["Veal", "Venison"]
+hint = "Saxon farmers raised the animals; Norman lords ate the meat."
+explanation = """
+Beef (boeuf), pork (porc), mutton (mouton), veal and venison came with the Normans.
+Sheep, cow and swine stayed Old English: the animal in the field, the French word on the plate.
+"""
+item = "Norman Menu"
+
+[[riddle]]
+id = 25
+location = "Archive"
+language = "Greek"
+category = "etymology"
+clue = "ἄστρον"
+text = "Greek 'astron' (ἄστρον) means star. Which word hides this root?"
+answer = "Disaster"
+wrong_answers = ["Easter", "Master"]
+decoys = ["Plaster", "Monster"]
+hint = "Blame bad luck on the stars."
+explanation = """
+Disaster = Italian disastro, 'ill-starred'.
+Easter is from a Germanic dawn goddess; master from Latin magister.
+"""
+
+[[riddle]]
+id = 30
+location = "Archive"
+language = "Hindi"
+category = "etymology"
+difficulty = 2
+clue = "namaste"
+text = "The Hindi word 'namaste' combines 'namas' (bow) and what?"
+answer = "To you"
+wrong_answers = ["Hello", "Goodbye", "Peace"]
+decoys = ["Thank you", "Welcome"]
+hint = "Namah = bow, te = to you."
+explanation = "From Sanskrit namas (bow/reverence) + te (to you)."
+item = "Namaste Symbol"
+
+[[riddle]]
+id = 64
+location = "Archive"
+kind = "order"
+language = "Arabic"
+category = "order"
+clue = "magazine"
+text = """
+Volkov's archive is a magazine in the old sense of the word: a storehouse.
+Put the word's journey in order, oldest first.
+"""
+sequence = ["Arabic makhāzin", "Italian magazzino", "French magasin", "English magazine"]
+hint = "It crossed the Mediterranean with the merchants, then the Channel."
+explanation = """
+Arabic makhāzin, plural of makhzan 'storehouse', became Italian magazzino and French magasin,
+'warehouse, shop'. English magazine first meant a storehouse, often for ammunition; the
+Gentleman's Magazine of 1731 made it a storehouse of reading as well.
+"""
+item = "Warehouse Receipt"
+
+[[riddle]]
+id = 65
+location = "Archive"
+language = "Slavic"
+category = "family tree"
+difficulty = 2
+clue = "Slavic"
+text = """
+Pinned above Volkov's desk: a chart of the Slavic languages, one name scratched out.
+Which language belongs in the gap?
+"""
+diagram = '''
+                         Slavic
+                           |
+        +------------------+------------------+
+        |                  |                  |
+       East               West              South
+    +---+---+          +---+---+         +----+----+
+    |       |          |       |         |         |
+ Russian   ???       Polish  Czech    Serbian  Bulgarian
+'''
+answer = "Ukrainian"
+wrong_answers = ["Slovak", "Lithuanian", "Romanian"]
+decoys = ["Hungarian", "Latvian"]
+hint = "Its biggest city stands on the Dnieper."
+explanation = """
+Ukrainian is East Slavic, like Russian and Belarusian. Slovak is Slavic too, but West Slavic,
+with Polish and Czech. Lithuanian and Latvian are Baltic, the Slavs' nearest cousins;
+Romanian is Romance and Hungarian is Uralic.
+"""
+
+[[riddle]]
+id = 66
+location = "Archive"
+language = "Germanic"
+category = "family tree"
+difficulty = 2
+clue = "Germanic"
+text = """
+A chart from Volkov's files: the Germanic languages, with one name blacked out.
+Which language belongs in the gap?
+"""
+diagram = '''
+                             Germanic
+                                |
+            +-------------------+-----------------+
+            |                   |                 |
+          North                West              East
+    +-------+-------+       +---+----+            |
+    |       |       |       |        |            |
+ Swedish  Danish   ???   English   German       Gothic
+'''
+answer = "Icelandic"
+wrong_answers = ["Frisian", "Finnish", "Estonian"]
+decoys = ["Irish", "Latvian"]
+hint = "Its speakers can still read the medieval sagas."
+explanation = """
+Icelandic is North Germanic, like Swedish, Danish, Norwegian and Faroese, and it has changed
+so little that Icelanders can still read the sagas. Frisian is West Germanic, like English
+and German. Finnish and Estonian are Uralic, Irish is Celtic, and Latvian is Baltic.
+"""
+
+[[riddle]]
+id = 67
+location = "Archive"
+language = "Russian"
+category = "reconstruction"
+difficulty = 3
+clue = "волк · vṛ́ka · vilkas · wolf"
+text = """
+The name Volkov comes from Russian волк (volk), 'wolf'. With Sanskrit vṛ́ka, Lithuanian
+vilkas and English wolf, which Proto-Indo-European word does his name go back to?
+"""
+answer = "*wĺ̥kʷos"
+wrong_answers = ["*h₂ŕ̥tḱos", "*ḱwṓ", "*wódr̥"]
+decoys = ["*h₁éḱwos", "*gʷṓws"]
+hint = "Look for a w and an l."
+explanation = """
+All four come from PIE *wĺ̥kʷos, 'wolf'. Greek lýkos and Latin lupus belong here too, though
+their sounds took unexpected turns. The others are the bear, the dog, water, the horse and
+cattle.
+"""
+item = "Wolf's Head Ring"
+
+[[riddle]]
+id = 68
+location = "Archive"
+language = "Russian"
+category = "borrowings"
+difficulty = 2
+clue = "вокзал (vokzal)"
+text = """
+A ticket in Volkov's drawer: вокзал (vokzal), Russian for a railway station.
+The word is named after pleasure gardens in which city?
+"""
+answer = "London"
+wrong_answers = ["Paris", "Vienna"]
+decoys = ["Berlin", "Warsaw"]
+hint = "Say vokzal with an English accent."
+explanation = """
+Вокзал comes from Vauxhall, the pleasure gardens of London. The station building at Pavlovsk,
+near St Petersburg, was also a place of entertainment, known as the vokzal, and the word moved
+on to railway stations in general.
+"""
+item = "Train Ticket"
+
+[[riddle]]
+id = 69
+location = "Archive"
+kind = "type"
+language = "Old Norse"
+category = "borrowings"
+clue = "vindauga   (vindr + auga)"
+text = """
+Old Norse vindauga: vindr, 'wind', plus auga, 'eye'.
+Which English word did the Vikings leave behind?
+"""
+answer = "window"
+accepted = ["windows"]
+hint = "The one in Volkov's archive has bars on it."
+explanation = """
+Window is Old Norse vindauga, the 'wind eye'. It pushed out the Old English words ēagþyrel,
+'eye-hole', and ēagduru, 'eye-door'.
+"""
+
+[[riddle]]
+id = 70
+location = "Archive"
+language = "Old Norse"
+category = "borrowings"
+difficulty = 2
+clue = "rannsaka"
+text = "Someone has ransacked Volkov's files before you. The word is Old Norse rannsaka. What did it mean?"
+answer = "To search a house"
+wrong_answers = ["To burn a ship", "To steal cattle"]
+decoys = ["To break an oath", "To bury treasure"]
+hint = "Rann was a house."
+explanation = """
+Old Norse rannsaka is rann 'house' + saka 'to search' (akin to English seek): a house search.
+In English the searching turned into plundering.
+"""
+
+[[riddle]]
+id = 71
+location = "Archive"
+language = "French"
+category = "etymology"
+clue = "sabot"
+text = "A saboteur has been at Volkov's files. The word is built on French sabot. What is a sabot?"
+answer = "A wooden shoe"
+wrong_answers = ["A spanner", "A fuse"]
+decoys = ["A rifle butt", "A lock pick"]
+hint = "Dutch farmers wore them too."
+explanation = """
+A sabot is a wooden shoe, and saboter meant to clatter about in them, and so to botch a job.
+The famous story of strikers throwing their clogs into the machines is not borne out by the
+word's history: sabotage began as bungled work.
+"""
+item = "Wooden Shoe"
+
+[[riddle]]
+id = 72
+location = "Archive"
+language = "French"
+category = "etymology"
+clue = "cuevrefeu"
+text = """
+"We move after curfew," reads a note in Volkov's hand. The word is Old French cuevrefeu.
+What does it say, word for word?
+"""
+answer = "Cover the fire"
+wrong_answers = ["Close the gates", "Ring the bells"]
+decoys = ["Light the lamps", "Feed the horses"]
+hint = "Feu is fire."
+explanation = """
+Old French cuevrefeu is 'cover fire': an evening bell told people to cover or put out their
+hearths, so that nothing would catch fire in the night.
+"""
+item = "Night Pass"
+
+# =============================================================================
+# VOLKOV'S SHOWDOWN
+# =============================================================================
+
+[[volkov_riddle]]
+id = 101
+kind = "type"
+language = "Latin"
+category = "sound shift"
+clue = "dens, dentis   (d → t)"
+text = "'Latin dens, dentis,' Volkov says. 'Grimm's law: d → t. The English word, detective?'"
+answer = "tooth"
+accepted = ["teeth"]
+explanation = """
+Dens, dentis and tooth share PIE *h₃dónts; d → t is Grimm's law, and English lost the n
+(compare German Zahn).
+"""
+
+[[volkov_riddle]]
+id = 102
+language = "English"
+category = "family"
+clue = "West Germanic"
+text = "'Which living language is English's closest relative?'"
+answer = "Frisian"
+wrong_answers = ["German", "Danish", "Icelandic"]
+decoys = ["Welsh", "Latin"]
+explanation = """
+Frisian, spoken on the North Sea coast.
+'Bread, butter and green cheese is good English and good Fries.'
+"""
+
+[[volkov_riddle]]
+id = 103
+kind = "match"
+language = "Sanskrit"
+category = "cognates"
+clue = "pitṛ · bhrātṛ · dva"
+text = "'Match my Sanskrit to your English.'"
+pairs = [
+    ["पितृ (pitṛ)", "father"],
+    ["भ्रातृ (bhrātṛ)", "brother"],
+    ["द्व (dva)", "two"],
+]
+explanation = "Sanskrit pitṛ, bhrātṛ and dva, English father, brother and two: all Proto-Indo-European."
+
+[[volkov_riddle]]
+id = 104
+language = "Akkadian"
+category = "etymology"
+clue = "Bāb-ili"
+text = "Volkov smiles. 'Babel. In Akkadian, Bāb-ili meant what?'"
+answer = "Gate of God"
+wrong_answers = ["Confusion", "Tower of Heaven", "City of Tongues"]
+decoys = ["House of Kings", "River Gate"]
+explanation = """
+Akkadian bāb-ili = gate of god.
+The Bible ties Babel to Hebrew bālal, 'to confuse': a pun, not the origin.
+"""

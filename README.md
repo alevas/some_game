@@ -64,8 +64,24 @@ The case runs Weber's Office → Staatsbibliothek → Café Mozart → St. Nicho
 Each location has its own riddles. Solve enough of them and a **lead** riddle appears; solving it
 unlocks the next location. You can follow the lead right away or keep digging, and travel back later.
 
-- **Riddle types.** Multiple choice, odd one out, *sound shifts* (apply Grimm's law and type the
-  English word), *match the pairs*, and one cipher.
+- **Riddle types.**
+  - Multiple choice and odd one out.
+  - *Sound shifts:* apply Grimm's law and type the English word.
+  - *Match the pairs.*
+  - *Order:* put a word's journey in order by typing letters.
+  - *Family trees:* place a language on an ASCII tree.
+  - *Reconstruct:* pick the PIE root behind its descendants.
+  - One cipher.
+- **A different case each time.** Each place has a pool of riddles (72 in all), and every case
+  asks a random handful of them. Leads, and the riddles whose evidence the story needs, are
+  always asked.
+- **Daily case.** *Daily case* on the title screen (`d` in the console version) is a shorter case,
+  16 riddles picked from the UTC date, so everyone gets the same riddles and the same questions
+  from Volkov that day. It's always played on Detective and saves separately from your normal case.
+  At the end you get a result to share:
+  - 🟩 first try, 🟨 after a slip, 🟥 missed, ⬛ not reached;
+  - 📁 a question dodged with evidence.
+  Press `c` to copy it. You can replay a day, but only the first result counts.
 - **No brute-forcing.** A wrong answer costs a heart, and the option you picked is replaced
   by a new decoy before the choices reshuffle.
 - **Streaks.** Consecutive first-try answers earn bonus points, and every third one restores a heart.
@@ -124,6 +140,12 @@ The ending depends on whether you beat Volkov, whether you found Elena, and how 
 
 The console version uses the same letters, typed at the prompt.
 
+## Editing the Story and Riddles
+
+Riddles and story are plain text files in `data/`; edit them in any text editor. Each file starts
+with a comment explaining every field. The game checks them when it starts, and if something is
+wrong it names the file, the entry and the problem instead of crashing.
+
 ## Files
 
 - `play.py` - Launcher that picks the right version for your terminal
@@ -132,7 +154,10 @@ The console version uses the same letters, typed at the prompt.
 - `serve.py` - Serves the full-screen version as a web page
 - `engine.py` - Game data (riddles, locations, story) and logic shared by both versions
 - `art.py` - ASCII art: scenes, character portraits with expressions, the Berlin map
-- `data/interrogations.toml` - Questions, lies and the evidence that breaks them (explains its own fields)
+- `data/riddles.toml` - Every riddle, grouped by place (explains its own fields)
+- `data/story.toml` - Places, people, beats, the Elena question and the showdown
+- `data/interrogations.toml` - Questions, lies and the evidence that breaks them
+- `data/SOURCES.md` - Sources for the riddles added after the first 39
 - `tips.py` - First-time tips
 - `settings.py` - Player settings (`settings.json`)
 - `savecode.py` - Save codes

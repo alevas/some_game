@@ -104,9 +104,9 @@ A noir detective game where players solve etymological riddles across Greek, Ger
 ## Quick Reference
 
 ### Add a Riddle
-Add a `Riddle(...)` to `RIDDLES` in `engine.py`, then add its id to a location's `riddle_ids`.
-Multiple choice needs two `decoys`; typed riddles use `kind="type"` (plus `accepted` spellings);
-matching uses `kind="match"` with `pairs`. Run `python -m unittest` to check it.
+Add a `[[riddle]]` block under its place in `data/riddles.toml`; the comment at the top of the
+file explains every field and riddle kind. Add its source to `data/SOURCES.md`. Run
+`python -m unittest`; the game also checks the file when it starts.
 
 ### Test
 1. `python -m unittest`

@@ -57,6 +57,12 @@ def sanity_text(s: GameState) -> Text:
     return t
 
 
+def letters_example(count: int) -> str:
+    """Example input for a letters answer: BCA for three, BCDA for four"""
+    letters = "".join(chr(ord("A") + i) for i in range(count))
+    return letters[1:] + letters[:1]
+
+
 # =============================================================================
 # ATMOSPHERE
 # =============================================================================
@@ -244,29 +250,43 @@ class TextModal(ModalScreen[None]):
 class EndScreen(ModalScreen[None]):
     """Ending or game over card"""
 
-    BINDINGS = [Binding("enter", "done", "Back to title")]
+    BINDINGS = [Binding("enter", "done", "Back to title"), Binding("c", "copy", "Copy result")]
 
-    def __init__(self, engine: GameEngine, title: str, text: str, triumph: bool, dead: bool = False):
+    def __init__(self, engine: GameEngine, title: str, text: str, triumph: bool, dead: bool = False,
+                 share: Optional[str] = None):
         super().__init__()
         self.engine, self.end_title, self.text = engine, title, text
         self.triumph, self.dead = triumph, dead
+        self.share = share  # the daily case's result, to paste into a chat
 
     def compose(self) -> ComposeResult:
         s = self.engine.state
         color = BLOOD if self.dead else AMBER
         body = Text()
-        body.append(art.GAME_OVER if self.dead else art.LOGO, style=color)
+        if not self.share or self.app.size.height >= 40:  # on a short screen the result to share wins
+            body.append(art.GAME_OVER if self.dead else art.LOGO, style=color)
         body.append(f"\n{self.end_title}\n\n", style=f"bold {color}")
         body.append(f"{self.text}\n\n", style=PAPER)
-        body.append(f"Riddles solved   {len(s.solved_riddles)}/{len(self.engine.riddles)}\n", style=SMOKE)
+        body.append(f"Riddles solved   {self.engine.solved_count()}/{len(self.engine.case_riddles())}\n", style=SMOKE)
         body.append(f"Evidence kept    {len(s.inventory)}/{self.engine.total_items()}\n", style=SMOKE)
         body.append(f"Difficulty       {self.engine.difficulty().name}\n", style=SMOKE)
         body.append(f"Final score      {s.score}\n\n", style=SMOKE)
         body.append("All our words are connected." if self.triumph else "The Babel Society wins. For now.",
                     style=f"italic {PAPER}")
-        body.append("\n\nPress Enter", style=SMOKE)
         with Vertical(classes="dialog end"):
             yield Static(body)
+            if self.share:
+                yield Static(heading("\nToday's result, to share"))
+                yield Static(Text(self.share, style=PAPER), id="share")
+                yield Static(Text("Press c to copy it, or select it with the mouse.", style=SMOKE))
+            yield Static(Text("\nPress Enter", style=SMOKE))
+
+    def check_action(self, action: str, parameters: tuple) -> Optional[bool]:
+        return bool(self.share) if action == "copy" else True
+
+    def action_copy(self):
+        self.app.copy_to_clipboard(self.share)
+        self.notify("Result copied. Paste it wherever you like.")
 
     def action_done(self):
         self.dismiss(None)
@@ -621,6 +641,7 @@ class TitleScreen(Screen):
                 yield RainScene(art.TITLE_SCENE)
                 yield OptionList(
                     Option("New case", id="new"),
+                    Option(self.daily_label(), id="daily"),
                     Option("Continue", id="continue"),
                     Option("Load a saved case", id="load"),
                     Option("Enter a save code", id="code"),
@@ -631,11 +652,29 @@ class TitleScreen(Screen):
                     id="title-menu",
                 )
 
+    def on_resize(self, event):
+        # Below 30 lines (smaller than play.py allows) the whole menu matters more than the rain
+        self.query_one(RainScene).display = event.size.height >= 30
+
+    def daily_label(self) -> str:
+        status = self.app.engine.daily_status()
+        return {"new": "Daily case", "in progress": "Daily case (continue)"}.get(status, "Daily case (done: replay)")
+
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
         engine = self.app.engine
         choice = event.option.id
         if choice == "new":
             self.app.push_screen(difficulty_modal(), self._start)
+        elif choice == "daily":
+            resumed = engine.start_daily()
+            self.app.switch_screen(GameScreen())
+            if resumed:
+                self.app.notify("Back to today's case.")
+            elif engine.state.replay:
+                self.app.notify("You have closed today's case already. A replay won't change your result.")
+            else:
+                self.app.notify(f"The daily case for {engine.state.daily}: everyone gets these riddles today. "
+                                "It is shorter, and it doesn't touch your other case.")
         elif choice == "code":
             self.app.push_screen(CodeEntryModal(), self._code_entered)
         elif choice == "achievements":
@@ -734,7 +773,7 @@ class GameScreen(Screen):
     @property
     def typing(self) -> bool:
         """The current riddle is answered in the text box"""
-        return self.asking and self.riddle.kind in ("type", "match")
+        return self.asking and self.riddle.kind in ("type", "match", "order")
 
     def say(self, text: str, mood: str = "neutral"):
         self.mood = mood
@@ -753,7 +792,7 @@ class GameScreen(Screen):
         self.options = []
         if self.riddle and self.riddle.kind == "choice":
             self.options = self.engine.shuffled_options(self.riddle)
-        elif self.riddle and self.riddle.kind == "match":
+        elif self.riddle and self.riddle.kind in ("match", "order"):
             self.options = self.engine.match_options(self.riddle)
         self.eliminated = []
         self.hint_shown = False
@@ -797,6 +836,8 @@ class GameScreen(Screen):
             self.set_focus(None)  # a hidden box would still swallow Enter
         self.query_one("#sidebar", Static).update(self.render_sidebar())
         self.refresh_bindings()
+        # A tall riddle (a family tree, a long explanation) must not leave its options below the fold
+        self.call_after_refresh(self.query_one("#riddle-box").scroll_visible, animate=False)
         self.call_after_refresh(self.maybe_tip)
 
     def dialogue_line(self) -> Text:
@@ -835,6 +876,10 @@ class GameScreen(Screen):
         t.append(f"{label}  ·  {r.language}  ·  {r.category}\n", style=f"bold {AMBER}")
         t.append(f"Clue: {r.clue}\n\n", style=f"bold {VIOLET}")
         t.append(f"{r.text}\n\n", style=PAPER)
+        if r.diagram:
+            diagram = Text(f"{r.diagram}\n\n", style=SMOKE, no_wrap=True)
+            diagram.highlight_words(["???"], style=f"bold {AMBER}")
+            t.append_text(diagram)
 
         if r.kind == "choice":
             for i, option in enumerate(self.options):
@@ -846,7 +891,15 @@ class GameScreen(Screen):
                 t.append(f"  {i + 1}. {left:<{width}}", style=PAPER)
                 t.append(f"{chr(ord('A') + i)}. ", style=AMBER)
                 t.append(f"{self.options[i]}\n", style=PAPER)
-            t.append("\nType the letters for 1, 2, 3 in order (e.g. BCA). Esc for commands.", style=SMOKE)
+            numbers = ", ".join(str(i + 1) for i in range(len(r.pairs)))
+            t.append(f"\nType the letters for {numbers} in order (e.g. {letters_example(len(r.pairs))}). "
+                     "Esc for commands.", style=SMOKE)
+        elif r.kind == "order":
+            for i, step in enumerate(self.options):
+                t.append(f"  {chr(ord('A') + i)}. ", style=AMBER)
+                t.append(f"{step}\n", style=PAPER)
+            t.append(f"\nType the letters from first to last (e.g. {letters_example(len(self.options))}). "
+                     "Esc for commands.", style=SMOKE)
         else:
             t.append("Type the word and press Enter. Esc for commands.", style=SMOKE)
 
@@ -900,6 +953,8 @@ class GameScreen(Screen):
         t = Text()
         t.append("CASE FILE\n\n", style=f"bold {AMBER}")
         t.append(f"Mode    {rules.name}\n", style=SMOKE)
+        if s.daily:
+            t.append(f"Daily case {s.daily}{'  (replay)' if s.replay else ''}\n", style=VIOLET)
         t.append("Sanity  ", style=SMOKE)
         for i in range(s.max_sanity):
             t.append("♥" if i < s.sanity else "♡", style=BLOOD if i < s.sanity else SMOKE)
@@ -971,14 +1026,14 @@ class GameScreen(Screen):
         if not text or not self.typing:
             return
         response = text
-        if self.riddle.kind == "match":
+        if self.riddle.kind in ("match", "order"):
             response = self.engine.match_response(self.riddle, self.options, text)
             if response is None:
-                self.notify(f"Type {len(self.riddle.pairs)} different letters, one per word, e.g. BCA.",
-                            severity="warning")
+                self.notify(f"Type {len(self.options)} different letters, each once, "
+                            f"e.g. {letters_example(len(self.options))}.", severity="warning")
                 return
         event.input.value = ""
-        self.respond(response, shown=text.upper() if self.riddle.kind == "match" else text)
+        self.respond(response, shown=text.upper() if self.riddle.kind in ("match", "order") else text)
 
     def respond(self, response: str, shown: Optional[str] = None):
         """Check an answer from the number keys or the text box"""
@@ -1001,14 +1056,16 @@ class GameScreen(Screen):
             self.options = self.engine.replace_wrong_option(r, self.options, response, self.eliminated)
         else:
             self.eliminated.append(shown or response)
-            if r.kind == "match":
+            if r.kind in ("match", "order"):
                 self.options = self.engine.match_options(r)
 
         if self.showdown and self.showdown.finished:
             self.finish_showdown()
         elif not self.showdown and self.engine.is_game_over():
+            share = self.engine.finish_daily("GAME OVER")
             self.app.push_screen(
-                EndScreen(self.engine, "GAME OVER", "Volkov's men found you first.", triumph=False, dead=True),
+                EndScreen(self.engine, "GAME OVER", "Volkov's men found you first.", triumph=False, dead=True,
+                          share=share),
                 self._back_to_title)
         else:
             self.render_all()
@@ -1183,10 +1240,11 @@ class GameScreen(Screen):
     def finish_showdown(self):
         won = self.showdown.won
         title, text = self.engine.get_ending(self.elena_guess, won)
-        self.app.push_screen(EndScreen(self.engine, title, text, triumph=won), self._back_to_title)
+        share = self.engine.finish_daily(title, self.elena_guess)
+        self.app.push_screen(EndScreen(self.engine, title, text, triumph=won, share=share), self._back_to_title)
 
     def _back_to_title(self, _=None):
-        self.engine.new_game()
+        self.engine.end_case()
         self.app.switch_screen(TitleScreen())
 
     # --- Tips ---------------------------------------------------------------------
@@ -1292,6 +1350,7 @@ class NoirApp(App):
     #code-text {{ margin: 1 0; }}
     #code-input {{ margin-top: 1; background: #0b0b0b; border: tall {AMBER}; }}
     #code-error {{ height: auto; margin-bottom: 1; }}
+    #share {{ width: auto; border: round {AMBER}; padding: 0 1; }}
     .page {{ width: 96; max-height: 90%; }}
     .page VerticalScroll {{ height: auto; max-height: 36; }}
     OptionList > .option-list--option-highlighted {{ background: {AMBER}; color: #0b0b0b; text-style: bold; }}
