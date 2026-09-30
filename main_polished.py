@@ -10,12 +10,15 @@ Run with: python main_polished.py
 import os
 import random
 import sys
+import textwrap
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import art
 from engine import (GameEngine, Riddle, Showdown, LOCATIONS, STORY_ORDER, ALL_RIDDLES,
                     ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO)
+from engine import Question
+from tips import TIPS, Tips
 
 
 # =============================================================================
@@ -40,6 +43,7 @@ class Color:
 
 
 COMMANDS = {"n", "b", "t", "m", "v", "e", "h"}
+TRUST_COLORS = {"distrustful": "red", "guarded": "bright_black", "trusting": "green"}
 
 
 def c(text: str, color: Optional[str] = None) -> str:
@@ -87,6 +91,7 @@ class TextUI:
 
     def __init__(self, engine: GameEngine):
         self.engine = engine
+        self.tips = Tips(engine.SAVE_DIR)
 
     def print_header(self):
         print(c(art.LOGO, 'cyan'))
@@ -126,7 +131,11 @@ class TextUI:
             else:
                 line = f'"{beats[-1] if beats else loc.greeting}"'
         print(c(art.PORTRAITS[loc.character][mood], 'white'))
-        print(c(f"{loc.character}:", 'bright_yellow'))
+        if showdown or not self.engine.interrogation(loc.id):
+            print(c(f"{loc.character}:", 'bright_yellow'))
+        else:
+            trust = self.engine.trust_label(loc.character)
+            print(f"{c(loc.character, 'bright_yellow')} {c(f'({trust})', TRUST_COLORS[trust])}{c(':', 'bright_yellow')}")
         typewrite(line)
 
     def print_riddle(self, riddle: Riddle, options: List[str], eliminated: List[str],
@@ -165,6 +174,8 @@ class TextUI:
             print(c("[e] Throw evidence   [n] Notes", 'bright_black'))
             return
         print(c("[h] Hint   [e] Evidence   [n] Notes   [b] Notebook   [t] Travel   [m] Menu", 'bright_black'))
+        if self.engine.interrogation():
+            print(c(f"[i] Question {self.engine.location().character}", 'bright_black'))
         if self.engine.can_confront():
             print(c("[v] Confront Volkov (ends the case)", 'bright_red'))
 
@@ -221,6 +232,39 @@ class TextUI:
             return items[int(choice) - 1]
         return None
 
+    def pay_for_hint(self) -> bool:
+        """A hint costs a piece of evidence, or a favor from someone who trusts you. True if paid."""
+        favors = self.engine.favors()
+        if not favors:
+            item = self.choose_item("Trade which evidence for a hint? You lose it.")
+            return bool(item and self.engine.spend_item(item))
+        choices = [f"Call in {who}'s favor (free)" for who in favors] + self.engine.state.inventory
+        print(f"\n{c('Call in a favor, or trade evidence for a hint?', 'bright_white')}")
+        for i, label in enumerate(choices, 1):
+            print(f"  {c(f'[{i}]', 'yellow')} {label}")
+        choice = ask("Which one (Enter to cancel): ")
+        if not (choice.isdigit() and 1 <= int(choice) <= len(choices)):
+            return False
+        n = int(choice) - 1
+        if n >= len(favors):
+            return self.engine.spend_item(choices[n])
+        who = favors[n]
+        print(c(f'\n{who}: "{self.engine.call_in_favor(who)}"', 'italic'))
+        pause()
+        return True
+
+    def tip(self, *keys: str):
+        """Show the first of these tips that hasn't been seen yet. Typing off turns tips off."""
+        key = self.tips.take(*keys)
+        if not key:
+            return
+        print(f"\n{c('TIP · ' + TIPS[key]['title'].upper(), 'bright_cyan')}")
+        for text in textwrap.wrap(TIPS[key]["console"], 58):
+            print(c(f"  {text}", 'cyan'))
+        if input(c("  Enter to continue, or type off to turn tips off: ", 'bright_black')).strip().lower() == "off":
+            self.tips.set_enabled(False)
+            print(c("  Tips are off. Turn them back on from the menu (m).", 'bright_black'))
+
     def ask_elena(self) -> str:
         """The final deduction. Returns the chosen place."""
         while True:
@@ -269,6 +313,7 @@ class TextUI:
                 print(f"{c(f'Slot {i}:', 'yellow')} {c(label, 'green' if exists else 'bright_black')}")
             print(f"\n{c('[1] Save Game', 'yellow')}\n{c('[2] Load Game', 'yellow')}")
             print(f"{c('[3] Back to Game', 'yellow')}\n{c('[4] Main Menu', 'yellow')}")
+            print(c(f"[5] Tips: {'on' if self.tips.enabled else 'off'}", 'yellow'))
             choice = ask()
             if choice == "1":
                 slot = ask("Save to slot (1-3, anything else to cancel): ")
@@ -289,6 +334,8 @@ class TextUI:
                 return "back"
             elif choice == "4":
                 return "main_menu"
+            elif choice == "5":
+                self.tips.set_enabled(not self.tips.enabled)
 
     def main_menu(self) -> str:
         print(c(art.LOGO, 'cyan'))
@@ -342,11 +389,91 @@ def after_wrong(engine: GameEngine, riddle: Riddle, options: List[str], response
     return engine.match_options(riddle) if riddle.kind == "match" else options
 
 
+def screen_tips(engine: GameEngine, riddle: Optional[Riddle]) -> List[str]:
+    """The tips that fit the case screen, most urgent first"""
+    keys = ["case"]
+    if riddle and riddle.kind != "choice":
+        keys.append("typing")
+    if engine.state.current_location == FINAL_LOCATION:
+        keys.append("archive")
+    if engine.state.inventory:
+        keys.append("evidence")
+    return keys
+
+
+def interrogate(engine: GameEngine, ui: TextUI) -> Tuple[str, Optional[str]]:
+    """Question the character here until the player leaves.
+    Returns the mood and line to keep on the case screen (None for the usual line)."""
+    talk, who = engine.interrogation(), engine.location().character
+    if engine.refuses():
+        print(c(f'\n{who}: "{talk.refuse}"', 'italic'))
+        print(c(engine.mend_advice(), 'bright_black'))
+        pause()
+        return "bad", f'"{talk.refuse}"'
+
+    question: Optional[Question] = None  # the answer on the table
+    mood, line, aside, spoke = "neutral", talk.opening, "", False
+    while True:
+        refusing = engine.refuses()
+        can_press = bool(question and not engine.is_caught(question) and engine.state.inventory and not refusing)
+        clear_screen()
+        ui.print_status()
+        print(c(f":: QUESTIONING {who.upper()} ::", 'bright_yellow'))
+        ui.print_character(mood, f'"{line}"')
+        if aside:
+            print(aside)
+        print()
+        questions = engine.questions()
+        if not refusing:
+            # New questions are marked •, broken lies ✓
+            for n, q in enumerate(questions, 1):
+                mark = "✓" if engine.is_caught(q) else " " if engine.was_asked(q) else "•"
+                print(f"  {c(f'[{n}]', 'yellow')} {mark} {q.ask}")
+            if engine.locked_questions():
+                print(c(f"        ({engine.locked_questions()} more as you solve riddles here)", 'bright_black'))
+            print()
+        if can_press:
+            print(f"  {c('[p]', 'yellow')} Press that answer with evidence")
+        print(f"  {c('[n]', 'yellow')} Case notes")
+        print(f"  {c('[Enter]', 'yellow')} Leave")
+        ui.tip("interrogation")
+        choice = ask("Ask: " if not refusing else "Press Enter to leave: ")
+
+        if not choice:
+            return (mood, f'"{line}"') if spoke else ("neutral", None)
+        if choice == "n":
+            ui.print_notes()
+        elif choice == "p" and can_press:
+            item = ui.choose_item("Which evidence contradicts that?")
+            if item:
+                result = engine.press(question.id, item)
+                mood, line, spoke = ("good" if result.broken else "bad"), result.line, True
+                if result.broken:
+                    perks = "a free hint (h) this case"
+                    if talk.blessing:
+                        perks += ", and a blessing before the showdown"
+                    aside = c(f"\nThe lie breaks. Added to your case notes.\n{who} trusts you now: {perks}.", 'bright_green')
+                else:
+                    aside = c(f"\nWrong evidence. {who} trusts you less." + ("  -1 ♥" if result.heart_lost else ""), 'red')
+                    if result.clammed_up:
+                        aside += c(f"\n{who} clams up. {engine.mend_advice()}", 'bright_black')
+        elif choice.isdigit() and not refusing and 1 <= int(choice) <= len(questions):
+            question = questions[int(choice) - 1]
+            mood, line, aside, spoke = "neutral", engine.ask(question.id), "", True
+
+
 def finish_case(engine: GameEngine, ui: TextUI):
     """Final deduction, the showdown, the ending, and a fresh case"""
     clear_screen()
     guess = ui.ask_elena()
     engine.travel(FINAL_LOCATION)
+    blessing = engine.receive_blessing()
+    if blessing:
+        who, line = blessing
+        print(c(f"\nYou remember {who}'s blessing:", 'bright_white'))
+        typewrite(f'"{line}"')
+        print(c("Your nerve steadies. +1 ♥", 'bright_red'))
+        pause()
     won = showdown(engine, ui)
     clear_screen()
     ui.print_end(*engine.get_ending(guess, won), 'green', triumph=won)
@@ -369,6 +496,8 @@ def showdown(engine: GameEngine, ui: TextUI) -> bool:
             ui.print_character(mood, line, showdown=True)
             ui.print_riddle(riddle, options, eliminated, False, "VOLKOV ASKS")
             ui.print_commands(showdown=True)
+            if riddle.kind != "choice":
+                ui.tip("typing")
             choice = ask("Your answer: ")
             if choice == "n":
                 ui.print_notes()
@@ -412,10 +541,12 @@ def play(engine: GameEngine, ui: TextUI):
                 label = "LEAD" if riddle.id == loc.lead_riddle else "Riddle"
                 ui.print_riddle(riddle, options, eliminated, hint_shown, label)
                 ui.print_commands()
+                ui.tip(*screen_tips(engine, riddle))
                 choice = ask("Your answer: ")
             else:
                 print(c("\nYou've turned this place inside out. Time to follow another lead.", 'bright_black'))
                 ui.print_commands()
+                ui.tip(*screen_tips(engine, riddle))
                 choice = ask()
 
             if choice == "n":
@@ -430,11 +561,12 @@ def play(engine: GameEngine, ui: TextUI):
                     text = engine.present(item)
                     mood, line = ("good", f'"{text}"') if text else ("neutral", f'"The {item}? That means nothing to me."')
                 continue
+            if choice == "i" and engine.interrogation():
+                mood, line = interrogate(engine, ui)
+                continue
             if choice == "h" and riddle and not hint_shown:
-                if not eliminated:
-                    item = ui.choose_item("Trade which evidence for a hint? You lose it.")
-                    if not (item and engine.spend_item(item)):
-                        continue
+                if not eliminated and not ui.pay_for_hint():
+                    continue
                 hint_shown = True
                 continue
             if choice == "t":
@@ -494,6 +626,7 @@ def play(engine: GameEngine, ui: TextUI):
                 new_loc = LOCATIONS[result.unlocked]
                 print(c(f"\n{loc.lead_text}", 'italic'))
                 print(c(f"\nNEW LEAD: {new_loc.name}", 'bright_yellow'))
+                ui.tip("lead")
                 if ask(f"[1] Go to {new_loc.name} now, Enter to keep digging here: ") == "1":
                     engine.travel(new_loc.id)
             else:

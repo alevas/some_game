@@ -25,6 +25,8 @@ from textual.widgets.option_list import Option
 import art
 from engine import (GameEngine, AnswerResult, Riddle, Showdown, STORY_ORDER, LOCATIONS, ALL_RIDDLES,
                     ELENA_QUESTION, ELENA_OPTIONS, FINAL_LOCATION, SHOWDOWN_INTRO)
+from engine import GameState, Question
+from tips import TIPS, Tips
 
 
 AMBER = "#e0b050"
@@ -35,9 +37,18 @@ MOSS = "#7fae6b"
 VIOLET = "#c49bd8"
 RAIN = "#5b6b7a"
 
+TRUST_COLORS = {"distrustful": BLOOD, "guarded": SMOKE, "trusting": MOSS}
+
 
 def heading(text: str) -> Text:
     return Text(text.upper(), style=f"bold {AMBER}")
+
+
+def sanity_text(s: GameState) -> Text:
+    t = Text()
+    for i in range(s.max_sanity):
+        t.append("♥" if i < s.sanity else "♡", style=BLOOD if i < s.sanity else SMOKE)
+    return t
 
 
 # =============================================================================
@@ -204,6 +215,155 @@ class EndScreen(ModalScreen[None]):
         self.dismiss(None)
 
 
+class TipModal(ModalScreen[None]):
+    """A first-time tip in the corner. Enter or Esc puts it away; x turns tips off."""
+
+    BINDINGS = [Binding("enter,escape", "close", "Got it"), Binding("x", "off", "No more tips")]
+
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+
+    def compose(self) -> ComposeResult:
+        tip = TIPS[self.key]
+        with Vertical(classes="dialog tip"):
+            yield Static(Text(f"TIP · {tip['title'].upper()}", style=f"bold {VIOLET}"), classes="dialog-title")
+            yield Static(Text(tip["tui"], style=PAPER))
+            yield Static(Text("\nEnter: got it    x: no more tips", style=SMOKE))
+
+    def action_close(self):
+        self.dismiss(None)
+
+    def action_off(self):
+        self.app.tips.set_enabled(False)
+        self.app.notify("Tips are off. Turn them back on from the menu (m).")
+        self.dismiss(None)
+
+
+class InterrogationModal(ModalScreen[Optional[Tuple[str, str]]]):
+    """Questioning the character here. Pick a question, then press the answer with evidence
+    to break a lie. Dismisses with their last (mood, line), or None if nothing was said."""
+
+    BINDINGS = [
+        Binding("p", "press", "Press with evidence"),
+        Binding("n", "notes", "Notes"),
+        Binding("escape", "leave", "Leave"),
+    ]
+
+    def __init__(self, engine: GameEngine):
+        super().__init__()
+        self.engine = engine
+        self.talk = engine.interrogation()
+        self.question: Optional[Question] = None  # the answer on the table
+        self.mood = "neutral"
+        self.line = self.talk.opening
+        self.aside: Optional[Text] = None         # what just happened, under the line
+        self.spoke = False
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog grill"):
+            yield Static(id="grill-status", classes="dialog-title")
+            with Horizontal(id="grill-talk"):
+                yield Static(id="grill-portrait")
+                yield Typewriter(id="grill-line")
+            yield OptionList(id="grill-options")
+            yield Static(Text("Enter: ask    p: press that answer with evidence    n: notes    Esc: leave",
+                              style=SMOKE), classes="grill-keys")
+
+    def on_mount(self):
+        self.render_view()
+
+    def can_press(self) -> bool:
+        e = self.engine
+        return (self.question is not None and not e.is_caught(self.question)
+                and bool(e.state.inventory) and not e.refuses())
+
+    def render_view(self):
+        e, who = self.engine, self.talk.character
+        label = e.trust_label(who)
+        status = heading(f"Questioning {who}")
+        status.append("    trust ", style=SMOKE)
+        status.append(label, style=TRUST_COLORS[label])
+        status.append("    sanity ", style=SMOKE)
+        status.append_text(sanity_text(e.state))
+        self.query_one("#grill-status", Static).update(status)
+        self.query_one("#grill-portrait", Static).update(Text(art.PORTRAITS[who][self.mood], style=PAPER))
+        line = Text()
+        line.append(f'\n"{self.line}"', style=f"italic {PAPER}")
+        if self.aside:
+            line.append("\n\n")
+            line.append_text(self.aside)
+        self.query_one("#grill-line", Typewriter).say(line)
+
+        # New questions are marked •, broken lies ✓
+        refusing = e.refuses()
+        options = [Option(f"{'✓' if e.is_caught(q) else ' ' if e.was_asked(q) else '•'} {q.ask}",
+                          id=f"q:{q.id}", disabled=refusing) for q in e.questions()]
+        if e.locked_questions():
+            options.append(Option(f"  ({e.locked_questions()} more as you solve riddles here)", disabled=True))
+        options += [None,
+                    Option("Press that answer with evidence  (p)", id="press", disabled=not self.can_press()),
+                    Option("Leave  (Esc)", id="leave")]
+        box = self.query_one("#grill-options", OptionList)
+        keep = box.highlighted_option.id if box.highlighted_option else None
+        box.set_options(options)
+        ids = [o.id for o in box.options]
+        if refusing:
+            keep = "leave"
+        elif keep is None or keep not in ids:
+            keep = next(i for i in ids if i)  # the first question
+        box.highlighted = ids.index(keep)
+        self.refresh_bindings()
+
+    def check_action(self, action: str, parameters: tuple) -> Optional[bool]:
+        if action == "press":
+            return self.can_press()
+        return True
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        choice = event.option.id
+        if choice == "leave":
+            self.action_leave()
+        elif choice == "press":
+            self.action_press()
+        elif choice and choice.startswith("q:"):
+            self.question = next(q for q in self.engine.questions() if q.id == choice[2:])
+            self.mood, self.line, self.aside = "neutral", self.engine.ask(self.question.id), None
+            self.spoke = True
+            self.render_view()
+
+    def action_press(self):
+        if self.can_press():
+            self.app.push_screen(ChoiceModal("Which evidence contradicts that?",
+                                             [(item, item, True) for item in self.engine.state.inventory]),
+                                 self._pressed)
+
+    def _pressed(self, item: Optional[str]):
+        if not item:
+            return
+        e, who = self.engine, self.talk.character
+        result = e.press(self.question.id, item)
+        self.mood, self.line, self.spoke = ("good" if result.broken else "bad"), result.line, True
+        if result.broken:
+            perks = "a free hint (h) this case"
+            if self.talk.blessing:
+                perks += ", and a blessing before the showdown"
+            self.aside = Text(f"The lie breaks. Added to your case notes.\n{who} trusts you now: {perks}.",
+                              style=MOSS)
+        else:
+            self.aside = Text(f"Wrong evidence. {who} trusts you less." + ("  -1 ♥" if result.heart_lost else ""),
+                              style=BLOOD)
+            if result.clammed_up:
+                self.aside.append(f"\n{who} clams up. {e.mend_advice()}", style=SMOKE)
+        self.render_view()
+
+    def action_notes(self):
+        self.app.push_screen(notes_page(self.engine))
+
+    def action_leave(self):
+        self.dismiss((self.mood, self.line) if self.spoke else None)
+
+
 def notes_page(engine: GameEngine) -> TextModal:
     body = Text()
     current = None
@@ -301,6 +461,7 @@ class GameScreen(Screen):
         Binding("g", "go", "Follow lead"),
         Binding("h", "hint", "Hint"),
         Binding("e", "evidence", "Evidence"),
+        Binding("i", "interrogate", "Ask"),
         Binding("n", "notes", "Notes"),
         Binding("b", "notebook", "Notebook"),
         Binding("t", "travel", "Travel"),
@@ -394,7 +555,11 @@ class GameScreen(Screen):
         self.query_one("#scene", Static).update(scene)
 
         self.query_one("#portrait", Static).update(Text(art.PORTRAITS[loc.character][self.mood], style=PAPER))
-        dialogue = Text(f"\n{loc.character}\n", style=f"bold {AMBER}")
+        dialogue = Text(f"\n{loc.character}", style=f"bold {AMBER}")
+        if not self.showdown and self.engine.interrogation(loc.id):
+            trust = self.engine.trust_label(loc.character)
+            dialogue.append(f"  ·  {trust}", style=TRUST_COLORS[trust])
+        dialogue.append("\n")
         dialogue.append_text(self.dialogue_line())
         self.query_one("#dialogue", Typewriter).say(dialogue)
 
@@ -409,6 +574,7 @@ class GameScreen(Screen):
             self.set_focus(None)  # a hidden box would still swallow Enter
         self.query_one("#sidebar", Static).update(self.render_sidebar())
         self.refresh_bindings()
+        self.call_after_refresh(self.maybe_tip)
 
     def dialogue_line(self) -> Text:
         """Most important line wins: a new lead, a new beat, what was just said, then small talk"""
@@ -552,9 +718,11 @@ class GameScreen(Screen):
             return self.mode == "result" and bool(self.last and self.last.unlocked)
         if action == "hint":
             return (self.asking and not in_showdown and not self.hint_shown
-                    and bool(self.eliminated or self.engine.state.inventory))
+                    and bool(self.eliminated or self.engine.state.inventory or self.engine.favors()))
         if action == "evidence":
             return bool(self.engine.state.inventory) and (not in_showdown or self.asking)
+        if action == "interrogate":
+            return not in_showdown and self.engine.interrogation() is not None
         if action == "confront":
             return self.engine.can_confront() and not in_showdown
         if action in ("travel", "menu"):
@@ -668,14 +836,51 @@ class GameScreen(Screen):
         if self.eliminated:
             self.hint_shown = True
             self.render_all()
+        elif self.engine.favors():
+            # People who trust you owe you a free hint each
+            favors = [(f"favor:{who}", f"Call in {who}'s favor (free)", True) for who in self.engine.favors()]
+            self.app.push_screen(ChoiceModal("Call in a favor, or trade evidence for a hint?",
+                                             favors + self.evidence_choices()), self._traded)
         else:
             self.app.push_screen(ChoiceModal("Trade which evidence for a hint? You lose it.",
                                              self.evidence_choices()), self._traded)
 
     def _traded(self, item: Optional[str]):
+        if item and item.startswith("favor:"):
+            who = item[len("favor:"):]
+            line = self.engine.call_in_favor(who)
+            if line:
+                self.hint_shown = True
+                if who == self.engine.location().character:
+                    self.say(line, "good")
+                else:
+                    self.notify(f'{who}: "{line}"', timeout=8)
+                self.render_all()
+            return
         if item and self.engine.spend_item(item):
             self.hint_shown = True
             self.render_all()
+
+    # --- Interrogations ----------------------------------------------------------
+
+    def action_interrogate(self):
+        if self.engine.refuses():
+            self.say(self.engine.interrogation().refuse, "bad")
+            self.notify(self.engine.mend_advice(), severity="warning")
+            self.render_all()
+        elif self.app.tips.take("interrogation"):
+            self.app.push_screen(TipModal("interrogation"), lambda _: self.open_interrogation())
+        else:
+            self.open_interrogation()
+
+    def open_interrogation(self):
+        self.app.push_screen(InterrogationModal(self.engine), self._interrogated)
+
+    def _interrogated(self, last: Optional[Tuple[str, str]]):
+        if last:
+            mood, line = last
+            self.say(line, mood)
+        self.render_all()
 
     # --- Navigation ------------------------------------------------------------
 
@@ -727,8 +932,12 @@ class GameScreen(Screen):
             return
         self.elena_guess = ELENA_OPTIONS[int(choice)]
         self.engine.travel(FINAL_LOCATION)
+        blessing = self.engine.receive_blessing()
         self.showdown = self.engine.start_showdown()
         self.new_question()
+        if blessing:
+            who, line = blessing
+            self.notify(f'You remember {who}\'s blessing: "{line}"  +1 ♥', timeout=10)
 
     def finish_showdown(self):
         won = self.showdown.won
@@ -739,6 +948,31 @@ class GameScreen(Screen):
         self.engine.new_game()
         self.app.switch_screen(TitleScreen())
 
+    # --- Tips ---------------------------------------------------------------------
+
+    def moment_tips(self) -> List[str]:
+        """The tips that fit what is on screen, most urgent first"""
+        keys = []
+        if not self.showdown:
+            keys.append("case")
+        if self.typing:
+            keys.append("typing")
+        if self.mode == "result" and self.last and self.last.unlocked:
+            keys.append("lead")
+        if self.engine.state.current_location == FINAL_LOCATION and not self.showdown:
+            keys.append("archive")
+        if self.engine.state.inventory:
+            keys.append("evidence")
+        return keys
+
+    def maybe_tip(self):
+        """Show one tip the player hasn't seen yet, unless something else is already open"""
+        if self.app.screen is not self:
+            return
+        key = self.app.tips.take(*self.moment_tips())
+        if key:
+            self.app.push_screen(TipModal(key))
+
     # --- Menu ---------------------------------------------------------------------
 
     def action_menu(self):
@@ -748,6 +982,7 @@ class GameScreen(Screen):
             ("notebook", "Etymology notebook", True),
             ("save", "Save", True),
             ("load", "Load", True),
+            ("tips", f"Tips: {'on' if self.app.tips.enabled else 'off'}", True),
             ("title", "Title screen", True),
         ]), self._menu_choice)
 
@@ -762,6 +997,9 @@ class GameScreen(Screen):
             ]), self._saved)
         elif choice == "load":
             self.app.push_screen(load_modal(self.engine), self._loaded)
+        elif choice == "tips":
+            self.app.tips.set_enabled(not self.app.tips.enabled)
+            self.notify(f"Tips are {'on' if self.app.tips.enabled else 'off'}.")
         elif choice == "title":
             self.app.switch_screen(TitleScreen())
 
@@ -806,11 +1044,20 @@ class NoirApp(App):
     .page VerticalScroll {{ height: auto; max-height: 36; }}
     OptionList > .option-list--option-highlighted {{ background: {AMBER}; color: #0b0b0b; text-style: bold; }}
     Footer {{ background: #141414; }}
+    InterrogationModal {{ align: center middle; background: rgba(0, 0, 0, 0.7); }}
+    TipModal {{ align: left top; background: rgba(0, 0, 0, 0.3); }}
+    .tip {{ width: 60; margin: 1 0 0 2; border: heavy {VIOLET}; }}
+    .grill {{ width: 94; }}
+    #grill-talk {{ height: auto; min-height: 10; }}
+    #grill-portrait {{ width: 16; height: auto; }}
+    #grill-line {{ width: 1fr; height: auto; }}
+    .grill-keys {{ margin-top: 1; }}
     """
 
     def __init__(self, save_dir: Optional[Path] = None):
         super().__init__()
         self.engine = GameEngine(save_dir)
+        self.tips = Tips(self.engine.SAVE_DIR)
 
     def on_mount(self):
         self.push_screen(TitleScreen())
